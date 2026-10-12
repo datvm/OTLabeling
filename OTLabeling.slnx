@@ -1,1 +1,8 @@
-<Solution />
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="Agents.MD" />
+    <File Path="project-conf.json" />
+  </Folder>
+  <Project Path="BibleVerseExtractor/BibleVerseExtractor.csproj" Id="1c5c3e41-488c-437d-96d1-01e03ffb4114" />
+  <Project Path="Common/Common.csproj" Id="9502b604-fe26-4d1e-aa76-b97e637590e8" />
+</Solution>
