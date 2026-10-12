@@ -1,3 +1,4 @@
 ﻿{
-    "DbPath": "db/out/labeling.sqlite" // Output by code is in an ignored folder, manually copy it out in order to commit them.
+    "DbPath": "db/out/labeling.sqlite", // Output by code is in an ignored folder, manually copy it out in order to commit them.
+    "Translation": "BSB"
 }

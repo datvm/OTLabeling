@@ -1,9 +1,11 @@
 ﻿namespace Common.Entities;
 
 [Index(nameof(Name), IsUnique = true)]
+[Index(nameof(Code), IsUnique = true)]
 public class BibleBook
 {
     public int Id { get; set; }
+    public required string Code { get; set; }
     public required string Name { get; set; }
 
     public ICollection<BibleVerse> Verses { get; set; } = [];

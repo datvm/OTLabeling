@@ -2,10 +2,10 @@
 
 #nullable disable
 
-namespace Common.Entities.Migrations
+namespace Common.Migrations
 {
     /// <inheritdoc />
-    public partial class Initial : Migration
+    public partial class AddedBibleData : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -16,6 +16,7 @@ namespace Common.Entities.Migrations
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
+                    Code = table.Column<string>(type: "TEXT", nullable: false),
                     Name = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
@@ -45,6 +46,12 @@ namespace Common.Entities.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BibleBooks_Code",
+                table: "BibleBooks",
+                column: "Code",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_BibleBooks_Name",

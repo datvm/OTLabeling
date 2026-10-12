@@ -5,4 +5,5 @@
   </Folder>
   <Project Path="BibleVerseExtractor/BibleVerseExtractor.csproj" Id="1c5c3e41-488c-437d-96d1-01e03ffb4114" />
   <Project Path="Common/Common.csproj" Id="9502b604-fe26-4d1e-aa76-b97e637590e8" />
+  <Project Path="WebClient/WebClient.csproj" Id="5389d0d9-16f4-48f7-a1a5-6aafd3385db5" />
 </Solution>

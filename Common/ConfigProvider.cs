@@ -30,6 +30,9 @@ public class ConfigProvider
         if (string.IsNullOrWhiteSpace(config.DbPath))
             throw new InvalidOperationException($"'{configFile}' must set DbPath.");
 
+        if (string.IsNullOrWhiteSpace(config.Translation))
+            throw new InvalidOperationException($"'{configFile}' must set Translation.");
+
         appConfig = config;
         appConfigPath = configDirectory;
     }
@@ -57,5 +60,6 @@ public class ConfigProvider
 }
 
 public record AppConfig(
-    string DbPath
+    string DbPath,
+    string Translation
 );
