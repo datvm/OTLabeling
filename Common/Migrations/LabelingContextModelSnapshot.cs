@@ -74,6 +74,96 @@ namespace Common.Migrations
                     b.ToTable("BibleVerses");
                 });
 
+            modelBuilder.Entity("Common.Entities.BookLabel", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("BookLabels");
+                });
+
+            modelBuilder.Entity("Common.Entities.BookLabelMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BookId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BookLabelId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookLabelId");
+
+                    b.HasIndex("BookId", "BookLabelId")
+                        .IsUnique();
+
+                    b.ToTable("BookLabelMappings");
+                });
+
+            modelBuilder.Entity("Common.Entities.BookOrder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("BookOrders");
+                });
+
+            modelBuilder.Entity("Common.Entities.BookOrderItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BookId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BookOrderId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookId");
+
+                    b.HasIndex("BookOrderId", "BookId", "Order")
+                        .IsUnique();
+
+                    b.ToTable("BookOrderItems");
+                });
+
             modelBuilder.Entity("Common.Entities.BibleVerse", b =>
                 {
                     b.HasOne("Common.Entities.BibleBook", "Book")
@@ -85,9 +175,61 @@ namespace Common.Migrations
                     b.Navigation("Book");
                 });
 
+            modelBuilder.Entity("Common.Entities.BookLabelMapping", b =>
+                {
+                    b.HasOne("Common.Entities.BibleBook", "Book")
+                        .WithMany("LabelMappings")
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Common.Entities.BookLabel", "BookLabel")
+                        .WithMany("BookMappings")
+                        .HasForeignKey("BookLabelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Book");
+
+                    b.Navigation("BookLabel");
+                });
+
+            modelBuilder.Entity("Common.Entities.BookOrderItem", b =>
+                {
+                    b.HasOne("Common.Entities.BibleBook", "Book")
+                        .WithMany("OrderItems")
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Common.Entities.BookOrder", "BookOrder")
+                        .WithMany("Items")
+                        .HasForeignKey("BookOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Book");
+
+                    b.Navigation("BookOrder");
+                });
+
             modelBuilder.Entity("Common.Entities.BibleBook", b =>
                 {
+                    b.Navigation("LabelMappings");
+
+                    b.Navigation("OrderItems");
+
                     b.Navigation("Verses");
+                });
+
+            modelBuilder.Entity("Common.Entities.BookLabel", b =>
+                {
+                    b.Navigation("BookMappings");
+                });
+
+            modelBuilder.Entity("Common.Entities.BookOrder", b =>
+                {
+                    b.Navigation("Items");
                 });
 #pragma warning restore 612, 618
         }

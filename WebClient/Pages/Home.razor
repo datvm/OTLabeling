@@ -1,0 +1,121 @@
+﻿@page "/"
+@inject LabelingDatabase Db
+
+<PageTitle>Books</PageTitle>
+
+<h1 class="h3 mb-3">Books</h1>
+
+@if (orders is null)
+{
+    @if (error is not null)
+    {
+        <div class="alert alert-danger" role="alert">@error</div>
+    }
+    else
+    {
+        <p class="text-secondary mb-0">
+            <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading books...
+        </p>
+    }
+}
+else
+{
+    <div class="d-flex align-items-center gap-2 mb-4">
+        <label class="form-label mb-0" for="order">Order</label>
+        <select id="order" class="form-select" style="width: auto" @bind="selectedOrder" @bind:after="LoadBooksAsync">
+            @foreach (var order in orders)
+            {
+                <option value="@order.Code">@order.Name</option>
+            }
+        </select>
+    </div>
+
+    @if (error is not null)
+    {
+        <div class="alert alert-danger" role="alert">@error</div>
+    }
+    else if (books is null)
+    {
+        <p class="text-secondary mb-0">
+            <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading books...
+        </p>
+    }
+    else
+    {
+        @BookList("Old Testament", BibleBookRow.OldTestament)
+        @BookList("New Testament", BibleBookRow.NewTestament)
+    }
+}
+
+@code {
+    List<BookOrderRow>? orders;
+    List<BibleBookRow>? books;
+    string selectedOrder = LabelingDatabase.DefaultBookOrderCode;
+    string? error;
+    int loadVersion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            orders = (await Db.GetBookOrdersAsync()).ToList();
+            var english = orders.FirstOrDefault(order => order.Code == LabelingDatabase.DefaultBookOrderCode);
+            selectedOrder = english?.Code ?? orders.FirstOrDefault()?.Code ?? selectedOrder;
+            await LoadBooksAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    async Task LoadBooksAsync()
+    {
+        var version = ++loadVersion;
+        try
+        {
+            var rows = await Db.GetBooksAsync(selectedOrder);
+            if (version != loadVersion)
+                return;
+
+            books = rows.ToList();
+            error = null;
+        }
+        catch (Exception ex)
+        {
+            if (version != loadVersion)
+                return;
+
+            books = null;
+            error = ex.Message;
+        }
+    }
+
+    RenderFragment BookList(string title, string testament) => __builder =>
+    {
+        var rows = books!.Where(book => book.Testament == testament).ToList();
+
+        <h2 class="h5">@title</h2>
+        <div class="list-group mb-4">
+            @if (rows.Count == 0)
+            {
+                <div class="list-group-item text-secondary">No books in this order.</div>
+            }
+            else
+            {
+                @foreach (var book in rows)
+                {
+                    <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-3" href="@($"books/{book.Code}")">
+                        @book.Name
+                        <span class="d-flex flex-wrap justify-content-end gap-1">
+                            @foreach (var label in book.Labels)
+                            {
+                                <span class="badge text-bg-secondary">@label</span>
+                            }
+                        </span>
+                    </a>
+                }
+            }
+        </div>
+    };
+}

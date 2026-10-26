@@ -1,0 +1,132 @@
+@page "/books/{Code}"
+@inject LabelingDatabase Db
+
+<PageTitle>@(book?.Name ?? Code)</PageTitle>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger" role="alert">@error</div>
+    <a class="btn btn-outline-secondary" href="">Back to books</a>
+}
+else if (book is null)
+{
+    <p class="text-secondary mb-0">
+        <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading @Code...
+    </p>
+}
+else
+{
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="">Books</a></li>
+            <li class="breadcrumb-item active" aria-current="page">@book.Name</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+        <h1 class="h3 mb-0">@book.Name <span class="badge text-bg-secondary align-middle">@book.Code</span></h1>
+        <div class="d-flex align-items-center gap-2">
+            <label class="form-label mb-0" for="chapter">Chapter</label>
+            <select id="chapter" class="form-select" style="width: auto" @onchange="OnChapterChanged">
+                @foreach (var item in chapters)
+                {
+                    if (item == chapter)
+                    {
+                        <option value="@item" selected>@item</option>
+                    }
+                    else
+                    {
+                        <option value="@item">@item</option>
+                    }
+                }
+            </select>
+        </div>
+    </div>
+
+    @if (verses is null)
+    {
+        <p class="text-secondary mb-0">
+            <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading verses...
+        </p>
+    }
+    else if (verses.Count == 0)
+    {
+        <p class="text-secondary mb-0">This chapter has no verses.</p>
+    }
+    else
+    {
+        <div class="list-group">
+            @foreach (var verse in verses)
+            {
+                <div class="list-group-item">
+                    <div class="d-flex gap-3">
+                        <div class="text-secondary text-nowrap">@verse.VerseNumber</div>
+                        <div class="verse-text flex-grow-1">@verse.Text</div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public string Code { get; set; } = "";
+
+    BibleBookRow? book;
+    List<int> chapters = [];
+    List<BibleVerseRow>? verses;
+    int chapter;
+    string? loadedCode;
+    string? error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedCode == Code)
+            return;
+
+        loadedCode = Code;
+        error = null;
+        book = null;
+        verses = null;
+        chapters = [];
+
+        try
+        {
+            book = await Db.GetBookByCodeAsync(Code);
+            if (book is null)
+            {
+                error = $"No book has code {Code}.";
+                return;
+            }
+
+            chapters = (await Db.GetChaptersAsync(book.Id)).ToList();
+            chapter = chapters.FirstOrDefault();
+            if (chapter > 0)
+                verses = (await Db.GetVersesAsync(book.Id, chapter)).ToList();
+            else
+                verses = [];
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    async Task OnChapterChanged(ChangeEventArgs e)
+    {
+        if (book is null || !int.TryParse(e.Value?.ToString(), out var next))
+            return;
+
+        chapter = next;
+        verses = null;
+        try
+        {
+            verses = (await Db.GetVersesAsync(book.Id, chapter)).ToList();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+}

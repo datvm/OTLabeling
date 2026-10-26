@@ -15,5 +15,7 @@
     <Using Include="Microsoft.EntityFrameworkCore" />
     <Using Include="Microsoft.Extensions.DependencyInjection" />
     <Using Include="ServiceSharp" />
+    <Using Include="System.Collections.Frozen" />
+    <Using Include="System.Collections.Immutable" />
   </ItemGroup>
 </Project>
