@@ -24,6 +24,53 @@ public sealed class LabelingDatabase(IJSRuntime js)
             """,
             orderCode);
 
+        await AttachLabelsAsync(books);
+        return books;
+    }
+
+    public async Task<BibleBookRow?> GetBookByCodeAsync(string code)
+    {
+        var rows = await QueryAsync<BibleBookRow>(
+            "SELECT Id, Code, Name FROM BibleBooks WHERE Code = ? COLLATE NOCASE LIMIT 1",
+            code);
+        var book = rows.FirstOrDefault();
+        if (book is not null)
+            await AttachLabelsAsync([book]);
+
+        return book;
+    }
+
+    public async Task<IReadOnlyList<int>> GetChaptersAsync(int bookId)
+    {
+        var rows = await QueryAsync<BibleChapterRow>(
+            "SELECT DISTINCT Chapter FROM BibleVerses WHERE BookId = ? ORDER BY Chapter",
+            bookId);
+        return rows.Select(row => row.Chapter).ToList();
+    }
+
+    public Task<IReadOnlyList<BibleVerseRow>> GetVersesAsync(int bookId)
+        => QueryAsync<BibleVerseRow>(
+            """
+            SELECT Chapter, VerseNumber, Text, AccumulatedVerseNumber
+            FROM BibleVerses
+            WHERE BookId = ?
+            ORDER BY Chapter, VerseNumber
+            """,
+            bookId);
+
+    public Task<IReadOnlyList<BibleVerseRow>> GetVersesAsync(int bookId, int chapter)
+        => QueryAsync<BibleVerseRow>(
+            """
+            SELECT Chapter, VerseNumber, Text, AccumulatedVerseNumber
+            FROM BibleVerses
+            WHERE BookId = ? AND Chapter = ?
+            ORDER BY VerseNumber
+            """,
+            bookId,
+            chapter);
+
+    async Task AttachLabelsAsync(IReadOnlyList<BibleBookRow> books)
+    {
         var labels = await QueryAsync<BookLabelRow>(
             $"""
             SELECT m.BookId, l.Name
@@ -42,36 +89,7 @@ public sealed class LabelingDatabase(IJSRuntime js)
             if (labelsByBook.TryGetValue(book.Id, out var names))
                 book.Labels = names;
         }
-
-        return books;
     }
-
-    public async Task<BibleBookRow?> GetBookByCodeAsync(string code)
-    {
-        var rows = await QueryAsync<BibleBookRow>(
-            "SELECT Id, Code, Name FROM BibleBooks WHERE Code = ? COLLATE NOCASE LIMIT 1",
-            code);
-        return rows.FirstOrDefault();
-    }
-
-    public async Task<IReadOnlyList<int>> GetChaptersAsync(int bookId)
-    {
-        var rows = await QueryAsync<BibleChapterRow>(
-            "SELECT DISTINCT Chapter FROM BibleVerses WHERE BookId = ? ORDER BY Chapter",
-            bookId);
-        return rows.Select(row => row.Chapter).ToList();
-    }
-
-    public Task<IReadOnlyList<BibleVerseRow>> GetVersesAsync(int bookId, int chapter)
-        => QueryAsync<BibleVerseRow>(
-            """
-            SELECT Chapter, VerseNumber, Text, AccumulatedVerseNumber
-            FROM BibleVerses
-            WHERE BookId = ? AND Chapter = ?
-            ORDER BY VerseNumber
-            """,
-            bookId,
-            chapter);
 
     sealed class BookLabelRow
     {

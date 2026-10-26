@@ -24,10 +24,24 @@ else
     </nav>
 
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
-        <h1 class="h3 mb-0">@book.Name <span class="badge text-bg-secondary align-middle">@book.Code</span></h1>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <h1 class="h3 mb-0">@book.Name</h1>
+            @foreach (var label in book.Labels)
+            {
+                <span class="badge text-bg-secondary">@label</span>
+            }
+        </div>
         <div class="d-flex align-items-center gap-2">
             <label class="form-label mb-0" for="chapter">Chapter</label>
             <select id="chapter" class="form-select" style="width: auto" @onchange="OnChapterChanged">
+                @if (chapter is null)
+                {
+                    <option value="" selected>All</option>
+                }
+                else
+                {
+                    <option value="">All</option>
+                }
                 @foreach (var item in chapters)
                 {
                     if (item == chapter)
@@ -51,21 +65,25 @@ else
     }
     else if (verses.Count == 0)
     {
-        <p class="text-secondary mb-0">This chapter has no verses.</p>
+        <p class="text-secondary mb-0">@(chapter is null ? "This book has no verses." : "This chapter has no verses.")</p>
     }
     else
     {
-        <div class="list-group">
-            @foreach (var verse in verses)
-            {
-                <div class="list-group-item">
-                    <div class="d-flex gap-3">
-                        <div class="text-secondary text-nowrap">@verse.VerseNumber</div>
-                        <div class="verse-text flex-grow-1">@verse.Text</div>
+        @foreach (var group in verses.GroupBy(verse => verse.Chapter))
+        {
+            <h2 class="h5 mt-4">Chapter @group.Key</h2>
+            <div class="list-group">
+                @foreach (var verse in group)
+                {
+                    <div class="list-group-item">
+                        <div class="d-flex gap-3">
+                            <div class="text-secondary text-nowrap">@verse.VerseNumber</div>
+                            <div class="verse-text flex-grow-1">@verse.Text</div>
+                        </div>
                     </div>
-                </div>
-            }
-        </div>
+                }
+            </div>
+        }
     }
 }
 
@@ -76,7 +94,7 @@ else
     BibleBookRow? book;
     List<int> chapters = [];
     List<BibleVerseRow>? verses;
-    int chapter;
+    int? chapter;
     string? loadedCode;
     string? error;
 
@@ -101,11 +119,8 @@ else
             }
 
             chapters = (await Db.GetChaptersAsync(book.Id)).ToList();
-            chapter = chapters.FirstOrDefault();
-            if (chapter > 0)
-                verses = (await Db.GetVersesAsync(book.Id, chapter)).ToList();
-            else
-                verses = [];
+            chapter = chapters.Count > 0 ? chapters[0] : null;
+            await LoadVersesAsync();
         }
         catch (Exception ex)
         {
@@ -115,18 +130,30 @@ else
 
     async Task OnChapterChanged(ChangeEventArgs e)
     {
-        if (book is null || !int.TryParse(e.Value?.ToString(), out var next))
+        if (book is null)
             return;
 
-        chapter = next;
+        var value = e.Value?.ToString();
+        chapter = int.TryParse(value, out var next) ? next : null;
         verses = null;
         try
         {
-            verses = (await Db.GetVersesAsync(book.Id, chapter)).ToList();
+            await LoadVersesAsync();
         }
         catch (Exception ex)
         {
             error = ex.Message;
         }
+    }
+
+    async Task LoadVersesAsync()
+    {
+        if (book is null)
+            return;
+
+        var rows = chapter is int number
+            ? await Db.GetVersesAsync(book.Id, number)
+            : await Db.GetVersesAsync(book.Id);
+        verses = rows.ToList();
     }
 }
