@@ -61,5 +61,21 @@ public class ConfigProvider
 
 public record AppConfig(
     string DbPath,
-    string Translation
+    string Translation,
+    AiConfig? Ai,
+    VerseLabelingConfig? VerseLabeling
+);
+
+public record AiConfig(
+    string? BaseUrl,
+    string? Model
+);
+
+public record VerseLabelingConfig(
+    string? Step,
+    string[]? Books,
+    string? Chapters,
+    string? Summary,
+    string? ImmediateContext,
+    int? Rpm
 );

@@ -1,4 +1,16 @@
 ﻿{
     "DbPath": "db/out/labeling.sqlite", // Output by code is in an ignored folder, manually copy it out in order to commit them.
-    "Translation": "BSB"
+    "Translation": "BSB",
+    "Ai": {
+        "BaseUrl": "",
+        "Model": ""
+    },
+    "VerseLabeling": {
+        "Step": "label-is-israelites",
+        "Books": [],
+        "Chapters": "",
+        "Summary": "",
+        "ImmediateContext": "",
+        "Rpm": 15
+    }
 }
