@@ -48,8 +48,9 @@ public sealed class LabelingDatabase(IJSRuntime js)
         return rows.Select(row => row.Chapter).ToList();
     }
 
-    public Task<IReadOnlyList<BibleVerseRow>> GetVersesAsync(int bookId)
-        => QueryAsync<BibleVerseRow>(
+    public async Task<IReadOnlyList<BibleVerseRow>> GetVersesAsync(int bookId)
+    {
+        var verses = await QueryAsync<BibleVerseRow>(
             """
             SELECT Chapter, VerseNumber, Text, AccumulatedVerseNumber
             FROM BibleVerses
@@ -57,9 +58,13 @@ public sealed class LabelingDatabase(IJSRuntime js)
             ORDER BY Chapter, VerseNumber
             """,
             bookId);
+        await AttachVerseTagsAsync(bookId, null, verses);
+        return verses;
+    }
 
-    public Task<IReadOnlyList<BibleVerseRow>> GetVersesAsync(int bookId, int chapter)
-        => QueryAsync<BibleVerseRow>(
+    public async Task<IReadOnlyList<BibleVerseRow>> GetVersesAsync(int bookId, int chapter)
+    {
+        var verses = await QueryAsync<BibleVerseRow>(
             """
             SELECT Chapter, VerseNumber, Text, AccumulatedVerseNumber
             FROM BibleVerses
@@ -68,6 +73,72 @@ public sealed class LabelingDatabase(IJSRuntime js)
             """,
             bookId,
             chapter);
+        await AttachVerseTagsAsync(bookId, chapter, verses);
+        return verses;
+    }
+
+    public Task<IReadOnlyList<VerseTagRow>> GetVerseTagsAsync()
+        => QueryAsync<VerseTagRow>(
+            """
+            SELECT t.Id, t.Name, COUNT(m.Id) AS VerseCount
+            FROM VerseTags t
+            LEFT JOIN VerseTagMappings m ON m.VerseTagId = t.Id
+            GROUP BY t.Id, t.Name
+            ORDER BY t.Name
+            """);
+
+    public async Task<VerseTagRow?> GetVerseTagAsync(int id)
+    {
+        var rows = await QueryAsync<VerseTagRow>(
+            """
+            SELECT t.Id, t.Name, COUNT(m.Id) AS VerseCount
+            FROM VerseTags t
+            LEFT JOIN VerseTagMappings m ON m.VerseTagId = t.Id
+            WHERE t.Id = ?
+            GROUP BY t.Id, t.Name
+            """,
+            id);
+        return rows.FirstOrDefault();
+    }
+
+    public async Task<IReadOnlyList<TaggedVerseRow>> GetVersesForTagAsync(int tagId)
+    {
+        var rows = await QueryAsync<TaggedVerseLinkRow>(
+            """
+            SELECT b.Id AS BookId, b.Code AS BookCode, b.Name AS BookName,
+                   v.Id AS VerseId, v.Chapter, v.VerseNumber, v.Text,
+                   t.Id AS TagId, t.Name AS TagName
+            FROM BibleVerses v
+            INNER JOIN BibleBooks b ON b.Id = v.BookId
+            INNER JOIN BookOrderItems i ON i.BookId = b.Id
+            INNER JOIN BookOrders o ON o.Id = i.BookOrderId
+            INNER JOIN VerseTagMappings m ON m.VerseId = v.Id
+            INNER JOIN VerseTags t ON t.Id = m.VerseTagId
+            WHERE o.Code = ?
+              AND v.Id IN (SELECT VerseId FROM VerseTagMappings WHERE VerseTagId = ?)
+            ORDER BY i."Order", v.Chapter, v.VerseNumber, m.TagIndex
+            """,
+            DefaultBookOrderCode,
+            tagId);
+
+        var verses = new List<TaggedVerseRow>();
+        foreach (var group in rows.GroupBy(row => row.VerseId))
+        {
+            var first = group.First();
+            verses.Add(new TaggedVerseRow
+            {
+                BookId = first.BookId,
+                BookCode = first.BookCode,
+                BookName = first.BookName,
+                Chapter = first.Chapter,
+                VerseNumber = first.VerseNumber,
+                Text = first.Text,
+                Tags = group.Select(row => new VerseTagRef { Id = row.TagId, Name = row.TagName }).ToList(),
+            });
+        }
+
+        return verses;
+    }
 
     async Task AttachLabelsAsync(IReadOnlyList<BibleBookRow> books)
     {
@@ -95,6 +166,65 @@ public sealed class LabelingDatabase(IJSRuntime js)
     {
         public int BookId { get; set; }
         public string Name { get; set; } = "";
+    }
+
+    sealed class VerseTagLinkRow
+    {
+        public int Chapter { get; set; }
+        public int VerseNumber { get; set; }
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    sealed class TaggedVerseLinkRow
+    {
+        public int BookId { get; set; }
+        public string BookCode { get; set; } = "";
+        public string BookName { get; set; } = "";
+        public int VerseId { get; set; }
+        public int Chapter { get; set; }
+        public int VerseNumber { get; set; }
+        public string Text { get; set; } = "";
+        public int TagId { get; set; }
+        public string TagName { get; set; } = "";
+    }
+
+    async Task AttachVerseTagsAsync(int bookId, int? chapter, IReadOnlyList<BibleVerseRow> verses)
+    {
+        var links = chapter is int number
+            ? await QueryAsync<VerseTagLinkRow>(
+                """
+                SELECT v.Chapter, v.VerseNumber, t.Id, t.Name
+                FROM VerseTagMappings m
+                INNER JOIN VerseTags t ON t.Id = m.VerseTagId
+                INNER JOIN BibleVerses v ON v.Id = m.VerseId
+                WHERE v.BookId = ? AND v.Chapter = ?
+                ORDER BY v.VerseNumber, m.TagIndex
+                """,
+                bookId,
+                number)
+            : await QueryAsync<VerseTagLinkRow>(
+                """
+                SELECT v.Chapter, v.VerseNumber, t.Id, t.Name
+                FROM VerseTagMappings m
+                INNER JOIN VerseTags t ON t.Id = m.VerseTagId
+                INNER JOIN BibleVerses v ON v.Id = m.VerseId
+                WHERE v.BookId = ?
+                ORDER BY v.Chapter, v.VerseNumber, m.TagIndex
+                """,
+                bookId);
+
+        var tagsByVerse = links
+            .GroupBy(link => (link.Chapter, link.VerseNumber))
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(link => new VerseTagRef { Id = link.Id, Name = link.Name }).ToList());
+
+        foreach (var verse in verses)
+        {
+            if (tagsByVerse.TryGetValue((verse.Chapter, verse.VerseNumber), out var tags))
+                verse.Tags = tags;
+        }
     }
 
     async Task<IReadOnlyList<T>> QueryAsync<T>(string sql, params object[] parameters)

@@ -1,5 +1,6 @@
 @page "/books/{Code}"
 @inject LabelingDatabase Db
+@inject NavigationManager Nav
 
 <PageTitle>@(book?.Name ?? Code)</PageTitle>
 
@@ -75,12 +76,7 @@ else
             <div class="list-group">
                 @foreach (var verse in group)
                 {
-                    <div class="list-group-item">
-                        <div class="d-flex gap-3">
-                            <div class="text-secondary text-nowrap">@verse.VerseNumber</div>
-                            <div class="verse-text flex-grow-1">@verse.Text</div>
-                        </div>
-                    </div>
+                    <VerseRow VerseNumber="verse.VerseNumber" Text="verse.Text" Tags="verse.Tags" />
                 }
             </div>
         }
@@ -91,35 +87,53 @@ else
     [Parameter]
     public string Code { get; set; } = "";
 
+    [SupplyParameterFromQuery(Name = "chapter")]
+    public string? RequestedChapter { get; set; }
+
     BibleBookRow? book;
     List<int> chapters = [];
     List<BibleVerseRow>? verses;
     int? chapter;
     string? loadedCode;
+    string? loadedChapterRequest;
     string? error;
 
     protected override async Task OnParametersSetAsync()
     {
-        if (loadedCode == Code)
+        if (loadedCode == Code && loadedChapterRequest == RequestedChapter && book is not null)
             return;
 
+        var sameBook = loadedCode == Code && book is not null && error is null;
         loadedCode = Code;
+        loadedChapterRequest = RequestedChapter;
         error = null;
-        book = null;
-        verses = null;
-        chapters = [];
 
         try
         {
-            book = await Db.GetBookByCodeAsync(Code);
-            if (book is null)
+            if (!sameBook)
             {
-                error = $"No book has code {Code}.";
-                return;
+                book = null;
+                verses = null;
+                chapters = [];
+                book = await Db.GetBookByCodeAsync(Code);
+                if (book is null)
+                {
+                    error = $"No book has code {Code}.";
+                    return;
+                }
+
+                chapters = (await Db.GetChaptersAsync(book.Id)).ToList();
             }
 
-            chapters = (await Db.GetChaptersAsync(book.Id)).ToList();
-            chapter = chapters.Count > 0 ? chapters[0] : null;
+            var showAll = string.Equals(RequestedChapter, "all", StringComparison.OrdinalIgnoreCase);
+            if (showAll)
+                chapter = null;
+            else if (int.TryParse(RequestedChapter, out var requested) && chapters.Contains(requested))
+                chapter = requested;
+            else
+                chapter = chapters.Count > 0 ? chapters[0] : null;
+
+            verses = null;
             await LoadVersesAsync();
         }
         catch (Exception ex)
@@ -128,22 +142,14 @@ else
         }
     }
 
-    async Task OnChapterChanged(ChangeEventArgs e)
+    void OnChapterChanged(ChangeEventArgs e)
     {
         if (book is null)
             return;
 
         var value = e.Value?.ToString();
-        chapter = int.TryParse(value, out var next) ? next : null;
-        verses = null;
-        try
-        {
-            await LoadVersesAsync();
-        }
-        catch (Exception ex)
-        {
-            error = ex.Message;
-        }
+        var next = string.IsNullOrEmpty(value) ? "all" : value;
+        Nav.NavigateTo($"books/{book.Code}?chapter={next}");
     }
 
     async Task LoadVersesAsync()

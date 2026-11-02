@@ -1,0 +1,31 @@
+<div class="list-group-item">
+    <div class="d-flex gap-3">
+        <div class="text-secondary text-nowrap">@VerseNumber</div>
+        <div class="flex-grow-1">
+            <div class="verse-text">@Text</div>
+            @if (Tags.Count > 0)
+            {
+                <div class="d-flex flex-wrap gap-1 mt-2">
+                    @foreach (var tag in Tags)
+                    {
+                        <a class="badge border text-decoration-none @(tag.Id == ActiveTagId ? "text-bg-primary" : "text-bg-light text-dark")" href="@($"tags/{tag.Id}")">@tag.Name</a>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public int VerseNumber { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Text { get; set; } = "";
+
+    [Parameter]
+    public IReadOnlyList<VerseTagRef> Tags { get; set; } = [];
+
+    [Parameter]
+    public int? ActiveTagId { get; set; }
+}

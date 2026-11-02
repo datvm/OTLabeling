@@ -30,4 +30,29 @@ public sealed class BibleVerseRow
     public int VerseNumber { get; set; }
     public string Text { get; set; } = "";
     public int AccumulatedVerseNumber { get; set; }
+    public List<VerseTagRef> Tags { get; set; } = [];
+}
+
+public sealed class VerseTagRef
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+}
+
+public sealed class VerseTagRow
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public int VerseCount { get; set; }
+}
+
+public sealed class TaggedVerseRow
+{
+    public int BookId { get; set; }
+    public string BookCode { get; set; } = "";
+    public string BookName { get; set; } = "";
+    public int Chapter { get; set; }
+    public int VerseNumber { get; set; }
+    public string Text { get; set; } = "";
+    public List<VerseTagRef> Tags { get; set; } = [];
 }
