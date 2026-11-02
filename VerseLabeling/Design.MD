@@ -20,6 +20,7 @@ Use these names with the same meaning in every step.
 - ImmediateContext: the topic text that the next chapter request needs.
 - Role tag: Israelite, Non-Israelite, or Everyone.
 - Group name: a specific name for one group. The model writes it. It is not from a fixed list.
+- Person name: a specific name for one person. The model writes it. It is not from a fixed list.
 - Run: one execution of one step. The table is `LabelRun`.
 - Run result: the tags one run gave one verse. The table is `LabelRunTag`.
 - Real tags: the tags a screen reads for a verse. The table is `VerseTagMapping`.
@@ -253,7 +254,7 @@ Proposed DeepSeek base URL: `https://api.deepseek.com`
 The step asks the client for one JSON object.
 The program sets the chat response format to a JSON schema for that object.
 The schema property names stay PascalCase.
-The object must match the schema in that step's design file.
+The object must match the schema in that step's code.
 The step checks the object.
 The step writes a success log only after the check succeeds.
 The step writes the database rows for that chapter only after the check succeeds.

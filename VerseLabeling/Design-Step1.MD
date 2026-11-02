@@ -9,12 +9,16 @@ This step writes a log.
 
 The role tag names are Israelite, Non-Israelite, and Everyone.
 Unknown is the group name for a non-Israelite group that the model cannot name.
+A person name is the name of one specific person.
+The model writes a person name.
+A person name is not from a fixed list.
 Use these spellings in the prompt, the check, and the log.
 
 ## What this step asks
 
 The program sends one chapter in each AI request.
-The prompt shape in this file is the whole request.
+The request text is `ChapterPrompt`.
+The program does not read this file to build the request.
 The program reads the verses from the database for one book and one chapter.
 The program orders those verses by `VerseNumber`.
 The program copies `BibleVerse.Text` into the chapter block.
@@ -56,155 +60,16 @@ The first request of each later book uses the text `None` for ImmediateContext.
 The program does not copy SummarySoFar from the previous book.
 The program does not copy ImmediateContext from the previous book.
 
-## Definitions
+## Request
 
-The program copies the definition text into the request.
-The last copied line is the last line under `How to write ImmediateContext`.
-The copy includes the first line, the last line, and every line between them.
-The copy includes the heading lines in that span.
-The program copies those lines as they are in this file.
-The program does not rewrite the definition text.
-The copy does not include `Group names`.
-The first copied line is the next paragraph.
+The request text is `ChapterPrompt` in the VerseLabeling project.
+The program does not read this file to build the request.
+The program does not read the request text from `project-conf.json`.
 
-Use only the chapter text supplied in this request, plus the SummarySoFar and ImmediateContext that this request supplies.
-Do not add facts from other biblical books, from later history, or from your training data.
-Spell Israelite, Non-Israelite, Everyone, Unknown, and Assimilated exactly as written in this request.
-
-### Israelite
-
-A person or group that belongs to the line of promise that begins with Abraham (Genesis 12) and continues through Isaac, Jacob, and their descendants.
-Do not apply the Israelite tag before Genesis 12.
-Treat "Hebrew," "children of Israel," "house of Jacob," and similar expressions as Israelite when the chapter text or the SummarySoFar supplied in the request makes the identification clear.
-Do not apply the tag on the basis of outside knowledge.
-
-### Non-Israelite
-
-Any person or group that the chapter text identifies as outside the Israelite line.
-When the text names a specific group, include that group name and also include Non-Israelite.
-When the text refers to a non-Israelite group that cannot be named from the supplied text, include both Non-Israelite and Unknown.
-
-### Everyone
-
-Use Everyone when the verse speaks of people in general.
-Everyone may be the only tag.
-Everyone may also share the array with other tags when the verse refers to a specific group as well.
-Example: Genesis 12:3 refers to Abraham and also to all the families of the earth. That verse receives Israelite and Everyone.
-
-Example: Psalm 34:15 says, “The eyes of the LORD are on the righteous.” The verse does not name Israelites, a foreign nation, or any other identifiable group.
-That verse receives Everyone alone.
-
-### Unknown
-
-Use Unknown (together with Non-Israelite) when the verse refers to a non-Israelite group and the supplied text does not give a name for that group.
-
-The model writes Unknown when the verse refers to a non-Israelite group and the model cannot name that group.
-The model also writes Non-Israelite on that verse.
-
-### Assimilated
-
-A free-form group name that always appears together with the Israelite role tag.
-Use it for a person or group who was not originally Israelite but who is described in the supplied text as joining or becoming part of the Israelite community.
-Also include the original group name when the text gives one.
-Example: Ruth is a Moabite who joins the community of Israel. A verse that describes her as doing so receives the tags `["Israelite", "Assimilated", "Moabite"]`.
-Do not use Assimilated as a substitute for Israelite.
-Do not use Assimilated when the text does not describe the person or group as joining the community.
-
-### How to choose the tags
-
-A verse has a `Tags` array.
-The array can contain more than one tag.
-The array is empty when the verse refers to no person and no group.
-Include Israelite when the verse refers to Israelites.
-Include Non-Israelite when the verse refers to a group that is not Israelite.
-Israelite and Non-Israelite may both appear on one verse.
-Include each specific group name that the verse refers to.
-Also include Non-Israelite when the array contains a specific non-Israelite group name.
-Include Everyone when the verse speaks of people in general.
-Everyone may share the array with other tags.
-Write each tag name once.
-You may write a group name that this text does not list.
-
-EXAMPLE: a judgment on Egypt and Cush has the tags Non-Israelite, Egypt, and Cushite.
-EXAMPLE: Israelites who fight Egypt and Cush have the tags Israelite, Non-Israelite, Egypt, and Cush.
-These examples show the array. They are not required test verses.
-The names in the examples are not a fixed list.
-
-### How to write SummarySoFar
-
-Write a new summary of this book through the current chapter.
-Maximum 150 words.
-Include the current chapter.
-Do not copy the previous SummarySoFar verbatim.
-Use only information present in the chapter text and in the SummarySoFar that was supplied in this request.
-
-### How to write ImmediateContext
-
-Write a short note (maximum 60 words) that tells the next request what the current topic is.
-Use only information present in the chapter text and in the ImmediateContext that was supplied in this request.
-
-## Group names
-
-The model may write any specific group name.
-Step 1 stores that name as the model wrote it.
-Step 1 does not merge names.
-A later step can merge names that refer to one group.
-EXAMPLE: Egypt and Egyptian may become one tag in that later step.
-That pair is an example. It is not a required merge.
-
-Do not start a full run until the definition text in this file exists.
-
-## Output rules
-
-The program copies the output rules into the request after the definition text.
-The last copied line is the closing fence of the JSON example.
-The copy includes the first line, the last line, and every line between them.
-The program copies those lines as they are in this file.
-The program does not rewrite the output rules.
-The first copied line is the next paragraph.
-
-The model returns one JSON object.
-The program sends that object shape as the chat response format.
-The property names are PascalCase.
-The object has `Verses`, `SummarySoFar`, and `ImmediateContext`.
-
-Each item in `Verses` has `VerseNumber` and `Tags`.
-`Tags` is an array of tag names.
-An empty array means the verse refers to no person and no group.
-The model includes every verse of the chapter exactly once.
-The rules in "How to choose the tags" decide the array.
-
-`SummarySoFar` is the book summary through this chapter.
-`ImmediateContext` is the topic text for the next chapter.
-Both texts must contain words.
-
-Example of the object shape.
-The verse number and the tag names in it are examples.
-
-```json
-{
-  "Verses": [
-    {
-      "VerseNumber": 1,
-      "Tags": ["Israelite", "Non-Israelite", "Egypt", "Cush"]
-    }
-  ],
-  "SummarySoFar": "{text}",
-  "ImmediateContext": "{text}"
-}
-```
-
-## Prompt shape
-
-The program builds the request in this shape.
-`{definition text}` is the copy defined under Definitions.
-`{output rules}` is the copy defined under Output rules.
-The program does not write those rules a second time in this shape.
+The request has this shape.
 
 ```text
-{definition text}
-
-{output rules}
+{rules}
 
 SummarySoFar:
 {SummarySoFar or None}
@@ -215,6 +80,17 @@ ImmediateContext:
 Chapter:
 {verse number} {verse text}
 ```
+
+`{rules}` is the text in `ChapterPrompt`.
+That text states the tag rules, including a tag for each named person.
+`{SummarySoFar or None}` and `{ImmediateContext or None}` come from the summary chain.
+`{verse number} {verse text}` is one line for each verse in the chapter.
+
+## Stored names
+
+The program stores a group name as the model wrote it.
+The program stores a person name as the model wrote it.
+The program does not merge names.
 
 ## Checks
 
@@ -227,10 +103,12 @@ The program ignores any other JSON property.
 
 The fixed names are Israelite, Non-Israelite, Everyone, and Unknown.
 The check fails when a tag differs from a fixed name only by letter case.
-Any other spelling stays as a group name.
+Any other spelling stays as the model wrote it.
+That spelling may be a group name or a person name.
 EXAMPLE: Israelites stays as a group name.
-That word is an example. It is not a required tag.
-The program stores that group name as the model wrote it.
+EXAMPLE: Abraham stays as a person name.
+Those words are examples. They are not required tags.
+The program stores that name as the model wrote it.
 The check fails in these cases:
 
 - A verse from the chapter is absent.

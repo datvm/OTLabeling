@@ -8,7 +8,6 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         try
         {
             var chapters = await SelectChaptersAsync(settings);
-            var prompt = DesignPrompt.Load(config.AppConfigPath);
             run = await InsertRunAsync(settings, chapters);
             var log = new RunLog(Path.Combine(
                 config.AppConfigPath,
@@ -27,7 +26,7 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             foreach (var chapter in chapters)
             {
                 var (summary, immediate) = ContextFor(chapter, ref bookCode, ref carriedSummary, ref carriedImmediate, settings);
-                var request = prompt.Build(summary, immediate, chapter.Verses);
+                var request = ChapterPrompt.Build(summary, immediate, chapter.Verses);
                 if (requestStart is long started)
                 {
                     var remain = gap - Stopwatch.GetElapsedTime(started);
