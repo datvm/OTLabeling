@@ -114,7 +114,7 @@ The message list keeps every question and every response in that chapter.
 The limit is 3 of those retries.
 The same request gap applies to each retry.
 Any other check failure fails immediately.
-The program writes the retry number before each of those retries.
+The program writes the retry number and the check errors before each of those retries.
 When the third retry still fails, the check failure stops the run.
 
 These cases are errors:

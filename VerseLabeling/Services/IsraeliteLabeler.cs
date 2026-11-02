@@ -74,7 +74,7 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                         log.WriteRaw(chapter.Book.Code, chapter.Chapter, body, 1);
 
                     missingTagRetries++;
-                    Console.WriteLine($"{chapter.Book.Code} {chapter.Chapter} check retry {missingTagRetries} of {MaxMissingTagRetries}. A verse tag is not in Tags.");
+                    Console.WriteLine($"{chapter.Book.Code} {chapter.Chapter} check retry {missingTagRetries} of {MaxMissingTagRetries}. The check failed: {joined}");
                     messages.Add(new ChatMessage(ChatRole.Assistant, body));
                     messages.Add(new ChatMessage(ChatRole.User, MissingTagRetryMessage(request, body, errors)));
                     await WaitForTurnAsync();

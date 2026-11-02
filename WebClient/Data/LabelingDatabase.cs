@@ -117,6 +117,13 @@ public sealed class LabelingDatabase(IJSRuntime js)
         return rows.FirstOrDefault();
     }
 
+    public Task<IReadOnlyList<VerseTagParentLink>> GetVerseTagParentLinksAsync()
+        => QueryAsync<VerseTagParentLink>(
+            """
+            SELECT link.TagId, link.ParentTagId
+            FROM VerseTagParents link
+            """);
+
     public Task<IReadOnlyList<VerseTagRef>> GetVerseTagParentsAsync(int tagId)
         => QueryAsync<VerseTagRef>(
             """

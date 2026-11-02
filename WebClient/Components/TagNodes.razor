@@ -1,0 +1,51 @@
+@foreach (var tag in Nodes)
+{
+    var children = ChildrenOf(tag);
+    var path = PanelPath.Combine(PathPrefix, tag.Id);
+    <div class="d-flex flex-wrap align-items-baseline gap-2 py-1">
+        <a href="@($"tags/{tag.Id}")">@(tag.Label)</a>
+        <span class="badge text-bg-secondary">@(tag.VerseCount)</span>
+        @if (children.Count > 0)
+        {
+            <ExpandLink Open="@(IsOpen(path))" OnToggle="@(PanelToggle(path))" />
+        }
+    </div>
+    @if (children.Count > 0 && IsOpen(path))
+    {
+        <div class="tag-children">
+            <TagNodes Nodes="@(children)"
+                      ChildrenByParent="@(ChildrenByParent)"
+                      PathPrefix="@(path)"
+                      IsOpen="@(IsOpen)"
+                      OnToggle="@(OnToggle)" />
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public IReadOnlyList<VerseTagRow> Nodes { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyDictionary<int, List<VerseTagRow>> ChildrenByParent { get; set; } = new Dictionary<int, List<VerseTagRow>>();
+
+    [Parameter]
+    public string PathPrefix { get; set; } = "";
+
+    [Parameter]
+    public Func<string, bool> IsOpen { get; set; } = _ => false;
+
+    [Parameter]
+    public EventCallback<string> OnToggle { get; set; }
+
+    EventCallback PanelToggle(string path) =>
+        EventCallback.Factory.Create(this, () => OnToggle.InvokeAsync(path));
+
+    List<VerseTagRow> ChildrenOf(VerseTagRow tag)
+    {
+        if (PanelPath.Contains(PathPrefix, tag.Id))
+            return [];
+
+        return ChildrenByParent.TryGetValue(tag.Id, out var children) ? children : [];
+    }
+}

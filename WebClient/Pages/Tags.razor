@@ -24,19 +24,26 @@ else if (tags.Count == 0)
 }
 else
 {
-    <div class="list-group">
-        @foreach (var tag in tags)
-        {
-            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-3" href="@($"tags/{tag.Id}")">
-                @(tag.Label)
-                <span class="badge text-bg-secondary">@(tag.VerseCount)</span>
-            </a>
-        }
-    </div>
+    @if (panelPaths.Count > 0)
+    {
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ExpandAll">Expand all</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CollapseAll">Collapse all</button>
+        </div>
+    }
+    <TagNodes Nodes="@(roots)"
+              ChildrenByParent="@(childrenByParent)"
+              PathPrefix="@("")"
+              IsOpen="@(IsPanelOpen)"
+              OnToggle="@(Toggle)" />
 }
 
 @code {
     List<VerseTagRow>? tags;
+    List<VerseTagRow> roots = [];
+    Dictionary<int, List<VerseTagRow>> childrenByParent = [];
+    List<string> panelPaths = [];
+    HashSet<string> openPaths = [];
     string? error;
 
     protected override async Task OnInitializedAsync()
@@ -44,10 +51,76 @@ else
         try
         {
             tags = (await Db.GetVerseTagsAsync()).ToList();
+            var links = await Db.GetVerseTagParentLinksAsync();
+            BuildTree(tags, links);
         }
         catch (Exception ex)
         {
             error = ex.Message;
         }
     }
+
+    void BuildTree(IReadOnlyList<VerseTagRow> rows, IReadOnlyList<VerseTagParentLink> links)
+    {
+        var byId = rows.ToDictionary(tag => tag.Id);
+        var childIds = new HashSet<int>();
+        childrenByParent = [];
+        foreach (var link in links)
+        {
+            if (!byId.TryGetValue(link.TagId, out var child) || !byId.ContainsKey(link.ParentTagId))
+                continue;
+
+            childIds.Add(child.Id);
+            if (!childrenByParent.TryGetValue(link.ParentTagId, out var children))
+            {
+                children = [];
+                childrenByParent.Add(link.ParentTagId, children);
+            }
+
+            children.Add(child);
+        }
+
+        foreach (var children in childrenByParent.Values)
+            children.Sort((left, right) => string.Compare(left.Label, right.Label, StringComparison.Ordinal));
+
+        roots = rows
+            .Where(tag => !childIds.Contains(tag.Id))
+            .OrderBy(tag => tag.Label, StringComparer.Ordinal)
+            .ToList();
+        panelPaths = [];
+        CollectPaths(roots, "");
+    }
+
+    void CollectPaths(IReadOnlyList<VerseTagRow> nodes, string prefix)
+    {
+        foreach (var tag in nodes)
+        {
+            if (PanelPath.Contains(prefix, tag.Id))
+                continue;
+
+            if (!childrenByParent.TryGetValue(tag.Id, out var children) || children.Count == 0)
+                continue;
+
+            var path = PanelPath.Combine(prefix, tag.Id);
+            panelPaths.Add(path);
+            CollectPaths(children, path);
+        }
+    }
+
+    bool IsPanelOpen(string path) => openPaths.Contains(path);
+
+    void Toggle(string path)
+    {
+        if (!openPaths.Add(path))
+            openPaths.Remove(path);
+    }
+
+    void ExpandAll()
+    {
+        openPaths.Clear();
+        foreach (var path in panelPaths)
+            openPaths.Add(path);
+    }
+
+    void CollapseAll() => openPaths.Clear();
 }

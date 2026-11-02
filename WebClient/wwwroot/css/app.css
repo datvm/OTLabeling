@@ -36,3 +36,9 @@
 .verse-text {
     white-space: pre-line;
 }
+
+.tag-children {
+    margin-left: 1.25rem;
+    padding-left: 0.75rem;
+    border-left: 1px solid var(--bs-border-color);
+}

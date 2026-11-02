@@ -47,6 +47,12 @@ public sealed class VerseTagRef
     public string Label => TagText.HideRoot(Subclassifier) ? Name : $"{Name} ({Subclassifier})";
 }
 
+public sealed class VerseTagParentLink
+{
+    public int TagId { get; set; }
+    public int ParentTagId { get; set; }
+}
+
 public sealed class VerseTagRow
 {
     public int Id { get; set; }

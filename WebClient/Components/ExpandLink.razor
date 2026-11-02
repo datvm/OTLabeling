@@ -1,0 +1,11 @@
+<button type="button" class="btn btn-link btn-sm p-0 align-baseline" @onclick="OnToggle">
+    @(Open ? "Collapse [-]" : "Expand [+]")
+</button>
+
+@code {
+    [Parameter]
+    public bool Open { get; set; }
+
+    [Parameter]
+    public EventCallback OnToggle { get; set; }
+}
