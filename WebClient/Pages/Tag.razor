@@ -1,7 +1,7 @@
 ﻿@page "/tags/{Id:int}"
 @inject LabelingDatabase Db
 
-<PageTitle>@(tag?.Name ?? "Tag")</PageTitle>
+<PageTitle>@(tag?.Label ?? "Tag")</PageTitle>
 
 @if (error is not null)
 {
@@ -19,12 +19,12 @@ else
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="tags">Tags</a></li>
-            <li class="breadcrumb-item active" aria-current="page">@(tag.Name)</li>
+            <li class="breadcrumb-item active" aria-current="page">@(tag.Label)</li>
         </ol>
     </nav>
 
     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-        <h1 class="h3 mb-0">@(tag.Name)</h1>
+        <h1 class="h3 mb-0">@(tag.Label)</h1>
         <span class="badge text-bg-secondary">@(tag.VerseCount)</span>
     </div>
 
@@ -33,7 +33,7 @@ else
         <p class="mb-3">
             @foreach (var parent in parents)
             {
-                <a class="badge text-bg-light border text-decoration-none me-1" href="@($"tags/{parent.Id}")">@(parent.Name)</a>
+                <a class="badge text-bg-light border text-decoration-none me-1" href="@($"tags/{parent.Id}")">@(parent.Label)</a>
             }
         </p>
     }

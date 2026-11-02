@@ -30,20 +30,30 @@ public sealed class BibleVerseRow
     public int VerseNumber { get; set; }
     public string Text { get; set; } = "";
     public int AccumulatedVerseNumber { get; set; }
-    public List<VerseTagRef> Tags { get; set; } = [];
+    public List<List<VerseTagRef>> Tags { get; set; } = [];
+}
+
+static class TagText
+{
+    public static bool HideRoot(string? subclassifier) =>
+        string.IsNullOrEmpty(subclassifier) || subclassifier is "People" or "Places";
 }
 
 public sealed class VerseTagRef
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public string Subclassifier { get; set; } = "";
+    public string Label => TagText.HideRoot(Subclassifier) ? Name : $"{Name} ({Subclassifier})";
 }
 
 public sealed class VerseTagRow
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public string Subclassifier { get; set; } = "";
     public int VerseCount { get; set; }
+    public string Label => TagText.HideRoot(Subclassifier) ? Name : $"{Name} ({Subclassifier})";
 }
 
 public sealed class TaggedVerseRow
@@ -54,5 +64,5 @@ public sealed class TaggedVerseRow
     public int Chapter { get; set; }
     public int VerseNumber { get; set; }
     public string Text { get; set; } = "";
-    public List<VerseTagRef> Tags { get; set; } = [];
+    public List<List<VerseTagRef>> Tags { get; set; } = [];
 }

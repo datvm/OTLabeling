@@ -2,7 +2,7 @@ namespace VerseLabeling.Services;
 
 static class ChapterCheck
 {
-    static readonly Dictionary<string, string?> FixedParent = new(StringComparer.Ordinal)
+    internal static readonly Dictionary<string, string?> FixedParent = new(StringComparer.Ordinal)
     {
         ["People"] = null,
         ["Places"] = null,
@@ -12,7 +12,6 @@ static class ChapterCheck
         ["Everyone"] = "People",
         ["Unknown"] = "People",
         ["Antediluvian"] = "People",
-        ["Israel"] = "Places",
         ["Non-Israel"] = "Places",
     };
 
@@ -65,12 +64,24 @@ static class ChapterCheck
         ChapterOutput output,
         string bookCode,
         int chapter,
-        bool beforeJoshua,
         IReadOnlyList<BibleVerse> verses)
     {
         var errors = new List<string>();
         var beforeIsrael = bookCode.Equals("GEN", StringComparison.OrdinalIgnoreCase) && chapter < 12;
-        var catalog = ReadCatalog(output.Tags, beforeIsrael, beforeJoshua, bookCode, errors);
+        var catalog = TagCatalog.Create(output.Tags);
+        errors.AddRange(catalog.Errors);
+        foreach (var name in catalog.Names.Distinct(StringComparer.Ordinal))
+        {
+            if (beforeIsrael && (name == "Israelite" || name == "Non-Israelite"))
+                errors.Add($"{name} appears before Genesis 12.");
+
+            if (!beforeIsrael && name == "Pre-Israelite")
+            {
+                errors.Add(bookCode.Equals("GEN", StringComparison.OrdinalIgnoreCase)
+                    ? "Pre-Israelite appears from Genesis 12 onward."
+                    : "Pre-Israelite appears outside Genesis 1-11.");
+            }
+        }
 
         if (output.Verses is null)
         {
@@ -87,7 +98,7 @@ static class ChapterCheck
                 else if (!expected.Contains(item.VerseNumber))
                     errors.Add($"Verse {item.VerseNumber} is not in the chapter.");
 
-                CheckVerseTags(item, catalog, beforeIsrael, beforeJoshua, bookCode, errors);
+                CheckVerseTags(item, catalog, beforeIsrael, bookCode, errors);
             }
 
             foreach (var number in expected.Order())
@@ -110,13 +121,26 @@ static class ChapterCheck
     {
         if (output.Tags is not null)
         {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var distinct = new List<TagOutput>();
             foreach (var tag in output.Tags)
             {
-                if (tag.Parents is null)
-                    continue;
+                if (tag.Parents is not null)
+                    tag.Parents = tag.Parents.Distinct(StringComparer.Ordinal).ToList();
 
-                tag.Parents = tag.Parents.Distinct(StringComparer.Ordinal).ToList();
+                tag.Subclassifier = NormalizeSubclassifier(tag.Subclassifier);
+                if (string.IsNullOrWhiteSpace(tag.Name))
+                {
+                    distinct.Add(tag);
+                    continue;
+                }
+
+                var key = TagLabel(tag.Name, tag.Subclassifier) + "\n" + string.Join('\n', tag.Parents ?? []);
+                if (seen.Add(key))
+                    distinct.Add(tag);
             }
+
+            output.Tags = distinct;
         }
 
         if (output.Verses is null)
@@ -131,126 +155,26 @@ static class ChapterCheck
         }
     }
 
-    static Dictionary<string, List<string>>? ReadCatalog(
-        List<TagOutput>? tags,
-        bool beforeIsrael,
-        bool beforeJoshua,
-        string bookCode,
-        List<string> errors)
+    public static bool TryResolveTag(
+        IReadOnlyList<TagOutput>? tags,
+        string text,
+        out TagOutput? match,
+        out string? error) =>
+        TagCatalog.Create(tags).TryResolve(text, null, out match, out error);
+
+    public static string TagLabel(string name, string? subclassifier)
     {
-        if (tags is null)
-        {
-            errors.Add("Tags is absent.");
-            return null;
-        }
-
-        var byName = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        var parentsAbsent = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var tag in tags)
-        {
-            if (string.IsNullOrWhiteSpace(tag.Name))
-            {
-                errors.Add("A tag name is blank.");
-                continue;
-            }
-
-            RejectFixedCase(tag.Name, $"Tag '{tag.Name}'", errors);
-            if (!byName.ContainsKey(tag.Name))
-                byName.Add(tag.Name, []);
-            else
-                errors.Add($"Tag '{tag.Name}' is repeated.");
-
-            if (tag.Parents is null)
-            {
-                errors.Add($"Tag '{tag.Name}' Parents is absent.");
-                parentsAbsent.Add(tag.Name);
-                continue;
-            }
-
-            var parents = new List<string>();
-            foreach (var parent in tag.Parents)
-            {
-                if (string.IsNullOrWhiteSpace(parent))
-                {
-                    errors.Add($"Tag '{tag.Name}' has a blank parent.");
-                    continue;
-                }
-
-                RejectFixedCase(parent, $"Tag '{tag.Name}' parent '{parent}'", errors);
-                parents.Add(parent);
-            }
-
-            byName[tag.Name] = parents;
-        }
-
-        foreach (var name in byName.Keys)
-        {
-            if (beforeIsrael && (name == "Israelite" || name == "Non-Israelite"))
-                errors.Add($"{name} appears before Genesis 12.");
-
-            if (!beforeIsrael && name == "Pre-Israelite")
-            {
-                errors.Add(bookCode.Equals("GEN", StringComparison.OrdinalIgnoreCase)
-                    ? "Pre-Israelite appears from Genesis 12 onward."
-                    : "Pre-Israelite appears outside Genesis 1-11.");
-            }
-
-            if (beforeJoshua && name == "Israel")
-                errors.Add("Israel appears before Joshua.");
-        }
-
-        foreach (var (name, parents) in byName)
-        {
-            if (parentsAbsent.Contains(name))
-                continue;
-
-            if (FixedParent.TryGetValue(name, out var required))
-            {
-                if (required is null && parents.Count > 0)
-                    errors.Add($"Root tag {name} has a parent.");
-
-                if (required is not null && (parents.Count != 1 || parents[0] != required))
-                    errors.Add($"Tag '{name}' must have the parent {required}.");
-            }
-            else if (parents.Count == 0)
-            {
-                errors.Add($"Tag '{name}' has no parent.");
-            }
-
-            foreach (var parent in parents)
-            {
-                if (parent == name)
-                    errors.Add($"Tag '{name}' is its own parent.");
-                else if (!byName.ContainsKey(parent))
-                    errors.Add($"Tag '{name}' parent '{parent}' is not in Tags.");
-            }
-        }
-
-        var color = new Dictionary<string, int>(StringComparer.Ordinal);
-        var cyclic = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var name in byName.Keys)
-            Walk(name, byName, color, cyclic, errors);
-
-        foreach (var (name, parents) in byName)
-        {
-            if (IsRoot(name) || parents.Count == 0 || cyclic.Contains(name))
-                continue;
-
-            if (parents.Any(parent => parent == name || !byName.ContainsKey(parent)))
-                continue;
-
-            if (!ReachesRoot(name, byName, []))
-                errors.Add($"Tag '{name}' has no path to a root tag.");
-        }
-
-        return byName;
+        var text = NormalizeSubclassifier(subclassifier);
+        return text.Length == 0 ? name : $"{name} ({text})";
     }
+
+    public static string NormalizeSubclassifier(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
 
     static void CheckVerseTags(
         VerseOutput item,
-        Dictionary<string, List<string>>? catalog,
+        TagCatalog catalog,
         bool beforeIsrael,
-        bool beforeJoshua,
         string bookCode,
         List<string> errors)
     {
@@ -260,7 +184,6 @@ static class ChapterCheck
             return;
         }
 
-        var names = new List<string>();
         foreach (var tag in item.Tags)
         {
             if (string.IsNullOrWhiteSpace(tag))
@@ -270,125 +193,34 @@ static class ChapterCheck
             }
 
             RejectFixedCase(tag, $"Verse {item.VerseNumber} tag '{tag}'", errors);
-            if (catalog is null || !catalog.ContainsKey(tag))
-            {
-                if (beforeIsrael && (tag == "Israelite" || tag == "Non-Israelite"))
-                    errors.Add($"Verse {item.VerseNumber} has {tag} before Genesis 12.");
-
-                if (!beforeIsrael && tag == "Pre-Israelite")
-                {
-                    errors.Add(bookCode.Equals("GEN", StringComparison.OrdinalIgnoreCase)
-                        ? $"Verse {item.VerseNumber} has Pre-Israelite from Genesis 12 onward."
-                        : $"Verse {item.VerseNumber} has Pre-Israelite outside Genesis 1-11.");
-                }
-
-                if (beforeJoshua && tag == "Israel")
-                    errors.Add($"Verse {item.VerseNumber} has Israel before Joshua.");
-            }
-
-            names.Add(tag);
-            if (catalog is not null && !catalog.ContainsKey(tag))
-                errors.Add($"Verse {item.VerseNumber} tag '{tag}' is not in Tags.");
-        }
-
-        if (catalog is null)
-            return;
-
-        foreach (var name in names)
-        {
-            if (!catalog.ContainsKey(name))
+            if (catalog.TryResolve(tag, item.Tags, out _, out var error))
                 continue;
 
-            var ancestors = new HashSet<string>(StringComparer.Ordinal);
-            CollectAncestors(name, catalog, ancestors, []);
-            foreach (var other in names)
+            errors.Add($"Verse {item.VerseNumber} tag '{tag}' {error}.");
+            if (error != "is not in Tags")
+                continue;
+
+            if (beforeIsrael && (tag == "Israelite" || tag == "Non-Israelite"))
+                errors.Add($"Verse {item.VerseNumber} has {tag} before Genesis 12.");
+
+            if (!beforeIsrael && tag == "Pre-Israelite")
             {
-                if (ancestors.Contains(other))
-                    errors.Add($"Verse {item.VerseNumber} includes '{name}' and its ancestor '{other}'.");
+                errors.Add(bookCode.Equals("GEN", StringComparison.OrdinalIgnoreCase)
+                    ? $"Verse {item.VerseNumber} has Pre-Israelite from Genesis 12 onward."
+                    : $"Verse {item.VerseNumber} has Pre-Israelite outside Genesis 1-11.");
             }
         }
     }
 
-    static void Walk(
-        string name,
-        Dictionary<string, List<string>> byName,
-        Dictionary<string, int> color,
-        HashSet<string> cyclic,
-        List<string> errors)
-    {
-        if (cyclic.Contains(name))
-            return;
 
-        if (color.TryGetValue(name, out var state))
-        {
-            if (state == 1)
-            {
-                errors.Add($"Tag '{name}' is its own ancestor.");
-                cyclic.Add(name);
-                color[name] = 2;
-            }
-
-            return;
-        }
-
-        color[name] = 1;
-        foreach (var parent in byName[name])
-        {
-            if (parent == name || !byName.ContainsKey(parent))
-                continue;
-
-            Walk(parent, byName, color, cyclic, errors);
-            if (cyclic.Contains(parent))
-                cyclic.Add(name);
-        }
-
-        color[name] = 2;
-    }
-
-    static bool ReachesRoot(string name, Dictionary<string, List<string>> byName, HashSet<string> stack)
-    {
-        if (!stack.Add(name))
-            return false;
-
-        var parents = byName[name];
-        if (parents.Count == 0)
-            return IsRoot(name);
-
-        foreach (var parent in parents)
-        {
-            if (byName.ContainsKey(parent) && ReachesRoot(parent, byName, stack))
-                return true;
-        }
-
-        return false;
-    }
-
-    static void CollectAncestors(
-        string name,
-        Dictionary<string, List<string>> catalog,
-        HashSet<string> ancestors,
-        HashSet<string> stack)
-    {
-        if (!stack.Add(name) || !catalog.TryGetValue(name, out var parents))
-            return;
-
-        foreach (var parent in parents)
-        {
-            if (!ancestors.Add(parent))
-                continue;
-
-            CollectAncestors(parent, catalog, ancestors, stack);
-        }
-    }
-
-    static void RejectFixedCase(string tag, string label, List<string> errors)
+    internal static void RejectFixedCase(string tag, string label, List<string> errors)
     {
         var root = FixedParent.Keys.FirstOrDefault(name => string.Equals(name, tag, StringComparison.OrdinalIgnoreCase));
         if (root is not null && !string.Equals(root, tag, StringComparison.Ordinal))
             errors.Add($"{label} differs from {root} only by letter case.");
     }
 
-    static bool IsRoot(string name) =>
+    internal static bool IsRoot(string name) =>
         FixedParent.TryGetValue(name, out var parent) && parent is null;
 
     static bool HasWords(string? text) =>
@@ -468,8 +300,11 @@ static class ChapterCheck
 
             foreach (var property in item.EnumerateObject())
             {
-                RejectWrongCase(property.Name, "Name", "Parents");
+                RejectWrongCase(property.Name, "Name", "Parents", "Subclassifier");
                 if (property.NameEquals("Name") && property.Value.ValueKind is not JsonValueKind.String and not JsonValueKind.Null)
+                    throw new LabelingException("A JSON value has the wrong type.");
+
+                if (property.NameEquals("Subclassifier") && property.Value.ValueKind is not JsonValueKind.String and not JsonValueKind.Null)
                     throw new LabelingException("A JSON value has the wrong type.");
 
                 if (!property.NameEquals("Parents"))
@@ -503,6 +338,7 @@ static class ChapterCheck
     }
 }
 
+
 sealed class ChapterOutput
 {
     public List<TagOutput>? Tags { get; set; }
@@ -514,6 +350,7 @@ sealed class ChapterOutput
 sealed class TagOutput
 {
     public string? Name { get; set; }
+    public string? Subclassifier { get; set; }
     public List<string?>? Parents { get; set; }
 }
 

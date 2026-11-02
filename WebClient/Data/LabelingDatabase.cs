@@ -87,12 +87,12 @@ public sealed class LabelingDatabase(IJSRuntime js)
                 FROM VerseTagParents child
                 INNER JOIN Walk walk ON walk.TagId = child.ParentTagId
             )
-            SELECT t.Id, t.Name, COUNT(DISTINCT m.VerseId) AS VerseCount
+            SELECT t.Id, t.Name, t.Subclassifier, COUNT(DISTINCT m.VerseId) AS VerseCount
             FROM VerseTags t
             LEFT JOIN Walk walk ON walk.RootId = t.Id
             LEFT JOIN VerseTagMappings m ON m.VerseTagId = walk.TagId
-            GROUP BY t.Id, t.Name
-            ORDER BY t.Name
+            GROUP BY t.Id, t.Name, t.Subclassifier
+            ORDER BY t.Name, t.Subclassifier
             """);
 
     public async Task<VerseTagRow?> GetVerseTagAsync(int id)
@@ -106,12 +106,12 @@ public sealed class LabelingDatabase(IJSRuntime js)
                 FROM VerseTagParents child
                 INNER JOIN Walk walk ON walk.TagId = child.ParentTagId
             )
-            SELECT t.Id, t.Name, COUNT(DISTINCT m.VerseId) AS VerseCount
+            SELECT t.Id, t.Name, t.Subclassifier, COUNT(DISTINCT m.VerseId) AS VerseCount
             FROM VerseTags t
             LEFT JOIN Walk walk ON walk.RootId = t.Id
             LEFT JOIN VerseTagMappings m ON m.VerseTagId = walk.TagId
             WHERE t.Id = ?
-            GROUP BY t.Id, t.Name
+            GROUP BY t.Id, t.Name, t.Subclassifier
             """,
             id);
         return rows.FirstOrDefault();
@@ -120,7 +120,7 @@ public sealed class LabelingDatabase(IJSRuntime js)
     public Task<IReadOnlyList<VerseTagRef>> GetVerseTagParentsAsync(int tagId)
         => QueryAsync<VerseTagRef>(
             """
-            SELECT p.Id, p.Name
+            SELECT p.Id, p.Name, p.Subclassifier
             FROM VerseTagParents link
             INNER JOIN VerseTags p ON p.Id = link.ParentTagId
             WHERE link.TagId = ?
@@ -141,7 +141,7 @@ public sealed class LabelingDatabase(IJSRuntime js)
             )
             SELECT b.Id AS BookId, b.Code AS BookCode, b.Name AS BookName,
                    v.Id AS VerseId, v.Chapter, v.VerseNumber, v.Text,
-                   t.Id AS TagId, t.Name AS TagName
+                   t.Id AS TagId, t.Name AS TagName, t.Subclassifier AS TagSubclassifier
             FROM BibleVerses v
             INNER JOIN BibleBooks b ON b.Id = v.BookId
             INNER JOIN BookOrderItems i ON i.BookId = b.Id
@@ -159,6 +159,7 @@ public sealed class LabelingDatabase(IJSRuntime js)
             tagId,
             DefaultBookOrderCode);
 
+        var parents = await ParentIdsByChildAsync();
         var verses = new List<TaggedVerseRow>();
         foreach (var group in rows.GroupBy(row => row.VerseId))
         {
@@ -171,7 +172,14 @@ public sealed class LabelingDatabase(IJSRuntime js)
                 Chapter = first.Chapter,
                 VerseNumber = first.VerseNumber,
                 Text = first.Text,
-                Tags = group.Select(row => new VerseTagRef { Id = row.TagId, Name = row.TagName }).ToList(),
+                Tags = OrganizeTags(
+                    group.Select(row => new VerseTagRef
+                    {
+                        Id = row.TagId,
+                        Name = row.TagName,
+                        Subclassifier = row.TagSubclassifier,
+                    }).ToList(),
+                    parents),
             });
         }
 
@@ -212,6 +220,7 @@ public sealed class LabelingDatabase(IJSRuntime js)
         public int VerseNumber { get; set; }
         public int Id { get; set; }
         public string Name { get; set; } = "";
+        public string Subclassifier { get; set; } = "";
     }
 
     sealed class TaggedVerseLinkRow
@@ -225,6 +234,7 @@ public sealed class LabelingDatabase(IJSRuntime js)
         public string Text { get; set; } = "";
         public int TagId { get; set; }
         public string TagName { get; set; } = "";
+        public string TagSubclassifier { get; set; } = "";
     }
 
     async Task AttachVerseTagsAsync(int bookId, int? chapter, IReadOnlyList<BibleVerseRow> verses)
@@ -232,7 +242,7 @@ public sealed class LabelingDatabase(IJSRuntime js)
         var links = chapter is int number
             ? await QueryAsync<VerseTagLinkRow>(
                 """
-                SELECT v.Chapter, v.VerseNumber, t.Id, t.Name
+                SELECT v.Chapter, v.VerseNumber, t.Id, t.Name, t.Subclassifier
                 FROM VerseTagMappings m
                 INNER JOIN VerseTags t ON t.Id = m.VerseTagId
                 INNER JOIN BibleVerses v ON v.Id = m.VerseId
@@ -243,7 +253,7 @@ public sealed class LabelingDatabase(IJSRuntime js)
                 number)
             : await QueryAsync<VerseTagLinkRow>(
                 """
-                SELECT v.Chapter, v.VerseNumber, t.Id, t.Name
+                SELECT v.Chapter, v.VerseNumber, t.Id, t.Name, t.Subclassifier
                 FROM VerseTagMappings m
                 INNER JOIN VerseTags t ON t.Id = m.VerseTagId
                 INNER JOIN BibleVerses v ON v.Id = m.VerseId
@@ -252,17 +262,132 @@ public sealed class LabelingDatabase(IJSRuntime js)
                 """,
                 bookId);
 
+        var parents = await ParentIdsByChildAsync();
         var tagsByVerse = links
             .GroupBy(link => (link.Chapter, link.VerseNumber))
             .ToDictionary(
                 group => group.Key,
-                group => group.Select(link => new VerseTagRef { Id = link.Id, Name = link.Name }).ToList());
+                group => OrganizeTags(
+                    group.Select(link => new VerseTagRef
+                    {
+                        Id = link.Id,
+                        Name = link.Name,
+                        Subclassifier = link.Subclassifier,
+                    }).ToList(),
+                    parents));
 
         foreach (var verse in verses)
         {
             if (tagsByVerse.TryGetValue((verse.Chapter, verse.VerseNumber), out var tags))
                 verse.Tags = tags;
         }
+    }
+
+    sealed class ParentLinkRow
+    {
+        public int TagId { get; set; }
+        public int ParentTagId { get; set; }
+    }
+
+    async Task<Dictionary<int, List<int>>> ParentIdsByChildAsync()
+    {
+        var links = await QueryAsync<ParentLinkRow>(
+            """
+            SELECT link.TagId, link.ParentTagId
+            FROM VerseTagParents link
+            INNER JOIN VerseTags parent ON parent.Id = link.ParentTagId
+            ORDER BY parent.Name
+            """);
+
+        var parents = new Dictionary<int, List<int>>();
+        foreach (var link in links)
+        {
+            if (!parents.TryGetValue(link.TagId, out var parentIds))
+            {
+                parentIds = [];
+                parents.Add(link.TagId, parentIds);
+            }
+
+            parentIds.Add(link.ParentTagId);
+        }
+
+        return parents;
+    }
+
+    static List<List<VerseTagRef>> OrganizeTags(
+        List<VerseTagRef> tags,
+        IReadOnlyDictionary<int, List<int>> parentsByChild)
+    {
+        var ordered = new List<VerseTagRef>();
+        var seen = new HashSet<int>();
+        foreach (var tag in tags)
+        {
+            if (seen.Add(tag.Id))
+                ordered.Add(tag);
+        }
+
+        var onVerse = ordered.ToDictionary(tag => tag.Id);
+        var hasChild = new HashSet<int>();
+        foreach (var tag in ordered)
+        {
+            if (!parentsByChild.TryGetValue(tag.Id, out var parentIds))
+                continue;
+
+            foreach (var parentId in parentIds)
+            {
+                if (onVerse.ContainsKey(parentId))
+                    hasChild.Add(parentId);
+            }
+        }
+
+        var chains = new List<List<VerseTagRef>>();
+        foreach (var tag in ordered)
+        {
+            if (hasChild.Contains(tag.Id))
+                continue;
+
+            CollectChains(tag, [], [], onVerse, parentsByChild, chains);
+        }
+
+        return chains;
+    }
+
+    static void CollectChains(
+        VerseTagRef tag,
+        List<VerseTagRef> stack,
+        HashSet<int> trail,
+        Dictionary<int, VerseTagRef> onVerse,
+        IReadOnlyDictionary<int, List<int>> parentsByChild,
+        List<List<VerseTagRef>> chains)
+    {
+        if (!trail.Add(tag.Id))
+            return;
+
+        stack.Add(tag);
+        var parents = new List<VerseTagRef>();
+        if (parentsByChild.TryGetValue(tag.Id, out var parentIds))
+        {
+            foreach (var parentId in parentIds)
+            {
+                if (onVerse.TryGetValue(parentId, out var parent))
+                    parents.Add(parent);
+            }
+        }
+
+        if (parents.Count == 0)
+        {
+            var chain = stack.ToList();
+            chain.Reverse();
+            chains.Add(chain);
+        }
+        else
+        {
+            foreach (var parent in parents)
+                CollectChains(parent, stack, trail, onVerse, parentsByChild, chains);
+        }
+
+        stack.RemoveAt(stack.Count - 1);
+        trail.Remove(tag.Id);
     }
 
     async Task<IReadOnlyList<T>> QueryAsync<T>(string sql, params object[] parameters)

@@ -5,10 +5,20 @@
             <div class="verse-text">@(Text)</div>
             @if (Tags.Count > 0)
             {
-                <div class="d-flex flex-wrap gap-1 mt-2">
-                    @foreach (var tag in Tags)
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @foreach (var chain in Tags)
                     {
-                        <a class="badge border text-decoration-none @(tag.Id == ActiveTagId ? "text-bg-primary" : "text-bg-light text-dark")" href="@($"tags/{tag.Id}")">@(tag.Name)</a>
+                        <span class="d-inline-flex flex-wrap align-items-center gap-1">
+                            @for (var index = 0; index < chain.Count; index++)
+                            {
+                                var tag = chain[index];
+                                @if (index > 0)
+                                {
+                                    <span class="text-secondary" aria-hidden="true">›</span>
+                                }
+                                <a class="badge border text-decoration-none @(tag.Id == ActiveTagId ? "text-bg-primary" : "text-bg-light text-dark")" href="@($"tags/{tag.Id}")">@(tag.Label)</a>
+                            }
+                        </span>
                     }
                 </div>
             }
@@ -24,7 +34,7 @@
     public string Text { get; set; } = "";
 
     [Parameter]
-    public IReadOnlyList<VerseTagRef> Tags { get; set; } = [];
+    public IReadOnlyList<List<VerseTagRef>> Tags { get; set; } = [];
 
     [Parameter]
     public int? ActiveTagId { get; set; }

@@ -6,19 +6,33 @@ static class ChapterPrompt
         Use only the chapter text supplied in this request, plus the SummarySoFar and ImmediateContext that this request supplies.
         Do not add people, events, or places that those texts do not mention.
         You may use the definition of the Promised Land in these rules to decide whether a named place is inside that land.
-        Spell People, Places, Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, Antediluvian, Israel, and Non-Israel exactly as written in this request.
+        Spell People, Places, Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, Antediluvian, and Non-Israel exactly as written in this request.
 
         People and Places are the root tags.
         A root tag has an empty Parents array.
         A tag may have more than one parent.
         Every parent is another tag in the same Tags array.
         Follow parents until you reach a root tag.
-        The verse Tags array lists only the most specific tags for that verse.
+        The verse Tags array lists each person, people, and place the verse refers to.
         A verse may list a person and a place together.
-        Do not also list a parent of a tag that is already on that verse.
-        The parents still belong to the verse through the Tags array.
-        A place name stays on the Places chain.
-        Do not reuse a place name as a people tag.
+        A verse may list a tag and its parent when the verse refers to both.
+        Example: Babylon is in Shinar. A verse that refers to both lists Babylon and Shinar.
+        Shinar is the parent of Babylon.
+        A parent that the verse does not name still belongs to the verse through the Tags array.
+        A person stays on the People chain.
+        A place stays on the Places chain.
+        The same name may be one person and one place.
+        Those tags have different roots, so leave Subclassifier empty.
+        When one name is two tags under the same root, give each one a Subclassifier, a short phrase from the supplied text.
+        Leave Subclassifier empty when the name is only one tag.
+        A verse tag is the name.
+        When the tag has a Subclassifier, write the verse tag as Name (Subclassifier).
+        When a verse uses a name that is under more than one root, also list a parent of the tag you mean.
+        Example: Canaan the son of Ham has an empty Subclassifier and the parent Pre-Israelite.
+        Canaan the land has an empty Subclassifier and the parent Non-Israel.
+        A verse about the son lists Canaan and Pre-Israelite.
+        A verse about the land lists Canaan and Non-Israel.
+        Use that same Subclassifier when a later chapter mentions that same person or place.
 
         ### People
 
@@ -30,6 +44,7 @@ static class ChapterPrompt
         Do not use Israelite before Genesis 12.
         Treat "Hebrew," "children of Israel," "house of Jacob," and similar expressions as Israelite when the chapter text or the SummarySoFar supplied in the request makes the identification clear.
         When the verse names a person or a more specific group in that line, that name is the verse tag, and Israelite is its parent.
+        The name Israel can be that person. Jacob receives the name Israel. That tag's parent is Israelite.
 
         Non-Israelite is a person or group that the chapter text identifies as outside the Israelite line.
         Use Non-Israelite only from Genesis 12 onward.
@@ -85,20 +100,16 @@ static class ChapterPrompt
         ### Places
 
         Places is a root tag.
-        Israel and Non-Israel are its children. Places is their only parent.
-        Israel is the Promised Land Joshua entered, either the whole land or a part of it.
-        Use the place tag Israel only from the book of Joshua onward.
-        Before that land is given to Joshua, every place is Non-Israel.
+        Non-Israel is its child. Places is Non-Israel's only parent.
+        Non-Israel is a place outside the Promised Land Joshua entered, and every place before that land is given to Joshua.
         This includes the land the spies enter.
-        From Joshua onward, a place inside that land has Israel as its parent.
-        A place outside that land has Non-Israel as its parent.
         A named place has the nearer place as its parent when the supplied text gives one.
         The verse lists the most specific place.
         Example: in Genesis 47, Goshen is inside Egypt, and the land has not been given to Joshua.
         Non-Israel is the parent of Egypt.
         Egypt is the parent of Goshen.
         The verse lists Goshen.
-        A verse that refers to the whole Promised Land from Joshua onward, with no smaller place, lists Israel.
+        When the text uses Israel for the land, Israel is a place tag and Places is its parent.
 
         ### How to choose the tags
 
@@ -107,16 +118,16 @@ static class ChapterPrompt
         Parents is an array of tag names.
         People and Places have empty Parents arrays.
         Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, and Antediluvian have the parent People.
-        Israel and Non-Israel have the parent Places.
+        Non-Israel has the parent Places.
         Any other tag has one or more parents.
         Write each tag name once in Tags.
         A people name, a person name, or a place name may be absent from this instruction.
         It must appear in the supplied chapter, SummarySoFar, or ImmediateContext.
 
         Each verse has its own Tags array of names.
-        That array lists only the most specific tags.
+        That array lists each person, people, and place the verse refers to.
+        The array may include a tag and its parent.
         The array is empty when the verse refers to no person, no people, and no place.
-        Do not put a tag and one of its parents on the same verse.
 
         Example: Ruth belongs to Israel and to Moab.
         Moabite has the parent Non-Israelite.
@@ -148,7 +159,7 @@ static class ChapterPrompt
         Each item has Name and Parents.
         Verses includes every verse of the chapter exactly once.
         Each item has VerseNumber and Tags.
-        The verse Tags array lists the most specific tag names.
+        The verse Tags array lists the tag names for that verse.
         An empty array means the verse refers to no person, no people, and no place.
 
         SummarySoFar is the book summary through this chapter.

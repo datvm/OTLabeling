@@ -34,11 +34,13 @@ sealed class RunLog
         File.WriteAllText(Path.Combine(folder, "run.txt"), text, Utf8);
     }
 
-    public void WriteRaw(string bookCode, int chapter, string body)
+    public void WriteRaw(string bookCode, int chapter, string body, int? attempt = null)
     {
         var directory = Path.Combine(folder, "raw");
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, $"{bookCode}-{chapter}.txt"), body, Utf8);
+        if (attempt is int number)
+            File.WriteAllText(Path.Combine(directory, $"{bookCode}-{chapter}-{number}.txt"), body, Utf8);
     }
 
     public void AppendChapter(

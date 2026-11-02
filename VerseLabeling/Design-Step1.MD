@@ -9,9 +9,9 @@ This step writes a log.
 
 The root tags are People and Places.
 Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, and Antediluvian are children of People.
-Israel and Non-Israel are children of Places.
-Israel is the Promised Land from the book of Joshua onward.
-Non-Israel is every other place, including every place before Joshua.
+Non-Israel is a child of Places.
+Non-Israel is a place outside the Promised Land, including every place before Joshua.
+Israel can be a person or a place. The check does not require its parent.
 A person name is the name of one specific person.
 A place name is the name of one specific place.
 The model writes a person name and a place name.
@@ -103,14 +103,15 @@ The program checks the object before a success log and before the database write
 `Design.MD` defines the error rule.
 The program uses that rule when the call fails, when the body is not one JSON object, when a JSON value has the wrong type, and when this check fails.
 The program matches the property names in PascalCase only.
-The program accepts these property names: `Tags`, `Name`, `Parents`, `Verses`, `VerseNumber`, `SummarySoFar`, and `ImmediateContext`.
+The program accepts these property names: `Tags`, `Name`, `Subclassifier`, `Parents`, `Verses`, `VerseNumber`, `SummarySoFar`, and `ImmediateContext`.
 The program ignores any other JSON property.
 
 The root tags are People and Places.
 The people tags are Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, and Antediluvian.
 People is the only parent of each people tag.
-The place tags are Israel and Non-Israel.
-Places is the only parent of each place tag.
+The place tag is Non-Israel.
+Places is the only parent of Non-Israel.
+Israel can be a person name or a place name.
 The check fails when a tag differs from one of these names only by letter case.
 Any other spelling stays as the model wrote it.
 That spelling may be a group name, a person name, or a place name.
@@ -119,11 +120,17 @@ EXAMPLE: Abraham stays as a person name.
 EXAMPLE: Goshen stays as a place name.
 Those words are examples. They are not required tags.
 The program stores that name as the model wrote it.
-`Subclassifier` stays empty.
-This step does not ask the model for a subclassifier.
+`Subclassifier` is empty when the name is one tag.
+`Subclassifier` is empty when the same name has different roots.
+When one name is two tags under the same root, the model writes a short `Subclassifier` on each one.
+The verse tag is `Name` when `Subclassifier` is empty.
+The verse tag is `Name (Subclassifier)` when `Subclassifier` has text.
+A verse that uses a name under more than one root also lists a parent of the tag it means.
 The program keeps one copy of a repeated name in a verse `Tags` array and in a `Parents` array.
 The first copy keeps its place.
-A repeated name in the chapter `Tags` array fails the check.
+The same `Name` and `Subclassifier` repeated in the chapter `Tags` array fails the check.
+A repeated `Name` with an empty `Subclassifier` fails the check when those tags share a root.
+A repeated `Name` with an empty `Subclassifier` passes when the tags have different roots.
 The check fails in these cases:
 
 - A verse from the chapter is absent.
@@ -135,20 +142,27 @@ The check fails in these cases:
 - A tag name is only spaces.
 - A parent is blank.
 - A parent is absent from the chapter `Tags` array.
-- A tag name is repeated in the chapter `Tags` array.
+- A parent matches more than one tag.
+- The same `Name` and `Subclassifier` are repeated in the chapter `Tags` array.
+- A repeated `Name` has an empty `Subclassifier`, and those tags share a root.
+- A verse tag matches more than one tag.
 - A root tag has a parent.
 - A people tag does not have People as its only parent.
-- A place tag Israel or Non-Israel does not have Places as its only parent.
+- A place tag Non-Israel does not have Places as its only parent.
 - A tag has no parent and is not a root tag.
 - A tag is its own parent or its own ancestor.
 - A tag has no path to a root tag.
-- A verse includes a tag and an ancestor of that tag.
 - A verse tag is absent from the chapter `Tags` array.
 - Israelite or Non-Israelite appears before Genesis 12.
 - Pre-Israelite appears outside Genesis 1-11.
-- The place tag Israel appears before the book of Joshua in the English book order.
 - `SummarySoFar` has no words.
 - `ImmediateContext` has no words.
+
+A verse may include a tag and a parent of that tag.
+The check allows that pair.
+EXAMPLE: Babylon and Shinar may both be tags on one verse.
+Shinar is the parent of Babylon.
+That pair is an example. It is not a required verse.
 
 An empty chapter `Tags` array passes the check when every verse `Tags` array is empty.
 An empty verse `Tags` array passes the check.
@@ -228,6 +242,11 @@ Fields: `BookCode`, `Chapter`, `SummarySoFar`, `ImmediateContext`.
 JSONL keeps commas and line breaks inside the two texts.
 
 The program writes `raw/{bookCode}-{chapter}.txt` for every response body.
+When a verse tag is not in `Tags`, the program asks again, up to 3 times.
+That request includes the original input, the response, and the check error.
+The message list keeps the earlier questions and responses.
+The program also writes `raw/{bookCode}-{chapter}-{attempt}.txt` for each of those bodies.
+Any other check failure stops the run.
 The program writes `verses.csv` and `chapters.jsonl` only after the check passes and the database transaction commits.
 
 ## Values to supply

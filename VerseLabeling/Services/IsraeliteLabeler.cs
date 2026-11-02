@@ -20,6 +20,18 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
 
             var gap = TimeSpan.FromSeconds(60d / settings.Rpm);
             long? requestStart = null;
+
+            async Task WaitForTurnAsync()
+            {
+                if (requestStart is long started)
+                {
+                    var remain = gap - Stopwatch.GetElapsedTime(started);
+                    if (remain > TimeSpan.Zero)
+                        await Task.Delay(remain);
+                }
+
+                requestStart = Stopwatch.GetTimestamp();
+            }
             string? bookCode = null;
             string? carriedSummary = null;
             string? carriedImmediate = null;
@@ -30,27 +42,44 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 Console.WriteLine($"{chapter.Book.Code} {chapter.Chapter} started.");
                 var (summary, immediate) = ContextFor(chapter, ref bookCode, ref carriedSummary, ref carriedImmediate, settings);
                 var request = ChapterPrompt.Build(summary, immediate, chapter.Verses);
-                if (requestStart is long started)
+                var messages = new List<ChatMessage> { new(ChatRole.User, request) };
+                await WaitForTurnAsync();
+                var body = await SendAsync(messages, settings.RetryDelaySeconds);
+                var missingTagRetries = 0;
+                ChapterOutput output;
+                while (true)
                 {
-                    var remain = gap - Stopwatch.GetElapsedTime(started);
-                    if (remain > TimeSpan.Zero)
-                        await Task.Delay(remain);
+                    log.WriteRaw(chapter.Book.Code, chapter.Chapter, body, missingTagRetries == 0 ? null : missingTagRetries + 1);
+                    output = ChapterCheck.Parse(body);
+                    ChapterCheck.DistinctTags(output);
+                    var errors = ChapterCheck.Check(
+                        output,
+                        chapter.Book.Code,
+                        chapter.Chapter,
+                        chapter.Verses);
+                    if (errors.Count == 0)
+                        break;
+
+                    var joined = string.Join(' ', errors);
+                    if (!CanRetryMissingTag(errors))
+                        throw new LabelingException("The check failed: " + joined);
+
+                    if (missingTagRetries == MaxMissingTagRetries)
+                    {
+                        Console.WriteLine($"The check retry limit of {MaxMissingTagRetries} was reached.");
+                        throw new LabelingException("The check failed: " + joined);
+                    }
+
+                    if (missingTagRetries == 0)
+                        log.WriteRaw(chapter.Book.Code, chapter.Chapter, body, 1);
+
+                    missingTagRetries++;
+                    Console.WriteLine($"{chapter.Book.Code} {chapter.Chapter} check retry {missingTagRetries} of {MaxMissingTagRetries}. A verse tag is not in Tags.");
+                    messages.Add(new ChatMessage(ChatRole.Assistant, body));
+                    messages.Add(new ChatMessage(ChatRole.User, MissingTagRetryMessage(request, body, errors)));
+                    await WaitForTurnAsync();
+                    body = await SendAsync(messages, settings.RetryDelaySeconds);
                 }
-
-                requestStart = Stopwatch.GetTimestamp();
-                var body = await SendAsync(request, settings.RetryDelaySeconds);
-                log.WriteRaw(chapter.Book.Code, chapter.Chapter, body);
-
-                var output = ChapterCheck.Parse(body);
-                ChapterCheck.DistinctTags(output);
-                var errors = ChapterCheck.Check(
-                    output,
-                    chapter.Book.Code,
-                    chapter.Chapter,
-                    chapter.BeforeJoshua,
-                    chapter.Verses);
-                if (errors.Count > 0)
-                    throw new LabelingException("The check failed: " + string.Join(' ', errors));
 
                 await SaveChapterAsync(run, chapter, output);
                 var byVerse = output.Verses!.ToDictionary(verse => verse.VerseNumber);
@@ -89,19 +118,44 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
     };
 
-    const int MaxContinuousRateLimits = 3;
+    const int MaxMissingTagRetries = 3;
+    const int MaxContinuousRetries = int.MaxValue;
+    static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMilliseconds(int.MaxValue);
 
-    int rateLimitStreak;
+    int retryStreak;
 
-    async Task<string> SendAsync(string request, int retryDelaySeconds)
+    static readonly string[] RetryableVerseErrors = [" is not in Tags."];
+
+    static bool CanRetryMissingTag(IReadOnlyList<string> errors) =>
+        errors.All(error =>
+            error.StartsWith("Verse ", StringComparison.Ordinal) &&
+            RetryableVerseErrors.Any(suffix => error.EndsWith(suffix, StringComparison.Ordinal)));
+
+    static string MissingTagRetryMessage(string originalInput, string response, IReadOnlyList<string> errors) =>
+        string.Join('\n',
+        [
+            "The check failed: " + string.Join(' ', errors),
+            "",
+            "A verse tag is missing from the Tags array.",
+            "Return a full JSON response for the same chapter.",
+            "Put every verse tag into Tags, including its parents.",
+            "Do not return only the missing tags.",
+            "",
+            "Original input:",
+            originalInput,
+            "",
+            "Your response:",
+            response,
+        ]);
+
+    async Task<string> SendAsync(IReadOnlyList<ChatMessage> messages, int retryDelaySeconds)
     {
-        var retryDelay = TimeSpan.FromSeconds(retryDelaySeconds);
         while (true)
         {
             try
             {
-                var response = await chat.GetResponseAsync<ChapterOutput>(request, ResponseSchema);
-                rateLimitStreak = 0;
+                var response = await chat.GetResponseAsync<ChapterOutput>(messages, ResponseSchema);
+                retryStreak = 0;
                 if (string.IsNullOrEmpty(response.Text))
                     throw new LabelingException("The API call returned no body.");
 
@@ -111,14 +165,19 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             {
                 throw;
             }
-            catch (Exception ex) when (IsTooManyRequests(ex))
+            catch (Exception ex) when (RetryStatus(ex) is int status)
             {
-                rateLimitStreak++;
-                if (rateLimitStreak > MaxContinuousRateLimits)
+                if (retryStreak == MaxContinuousRetries)
+                {
+                    Console.WriteLine($"The API returned {status}. The retry limit of {MaxContinuousRetries} was reached.");
                     throw new LabelingException("The API call failed: " + Redact(ex.Message));
+                }
 
-                Console.WriteLine($"The API returned 429. The next attempt waits {retryDelaySeconds} seconds.");
-                await Task.Delay(retryDelay);
+                retryStreak++;
+                var wait = RetryDelay(retryDelaySeconds, retryStreak);
+                var waitSeconds = (long)wait.TotalSeconds;
+                Console.WriteLine($"The API returned {status}. Retry {retryStreak}. The next attempt waits {waitSeconds} seconds.");
+                await Task.Delay(wait);
             }
             catch (Exception ex)
             {
@@ -127,28 +186,94 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         }
     }
 
-    static bool IsTooManyRequests(Exception exception)
+    static TimeSpan RetryDelay(int baseSeconds, int streak)
     {
-        for (Exception? current = exception; current is not null; current = current.InnerException)
-        {
-            if (current is System.ClientModel.ClientResultException client && client.Status == 429)
-                return true;
+        var doublings = (streak - 1) / 3;
+        long seconds = baseSeconds;
+        for (var i = 0; i < doublings && seconds <= long.MaxValue / 2; i++)
+            seconds *= 2;
 
-            if (current is HttpRequestException http && http.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-                return true;
+        var delay = TimeSpan.FromSeconds(seconds);
+        return delay <= MaxRetryDelay ? delay : MaxRetryDelay;
+    }
+
+    static int? RetryStatus(Exception exception)
+    {
+        var seen = new HashSet<Exception>();
+        return Find(exception);
+
+        int? Find(Exception? current)
+        {
+            if (current is null || !seen.Add(current))
+                return null;
+
+            if (current is AggregateException aggregate)
+            {
+                foreach (var inner in aggregate.InnerExceptions)
+                {
+                    var aggregateStatus = Find(inner);
+                    if (aggregateStatus is not null)
+                        return aggregateStatus;
+                }
+            }
+
+            if (StatusCode(current) is int code and (429 or 503))
+                return code;
+
+            if (MessageStatus(current.Message) is int messageStatus)
+                return messageStatus;
+
+            return Find(current.InnerException);
+        }
+    }
+
+    static int? StatusCode(Exception exception)
+    {
+        if (exception is System.ClientModel.ClientResultException client)
+            return client.Status;
+
+        if (exception is HttpRequestException http && http.StatusCode is System.Net.HttpStatusCode httpCode)
+            return (int)httpCode;
+
+        foreach (var property in exception.GetType().GetProperties())
+        {
+            if (property.Name is not ("Status" or "StatusCode"))
+                continue;
+
+            var value = property.GetValue(exception);
+            if (value is int number)
+                return number;
+
+            if (value is System.Net.HttpStatusCode status)
+                return (int)status;
         }
 
-        return false;
+        return null;
+    }
+
+    static int? MessageStatus(string message)
+    {
+        if (message.Contains("Service Unavailable", StringComparison.OrdinalIgnoreCase))
+            return 503;
+
+        if (message.Contains("Too Many Requests", StringComparison.OrdinalIgnoreCase))
+            return 429;
+
+        if (message.Contains("HTTP 503", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Status: 503", StringComparison.OrdinalIgnoreCase))
+            return 503;
+
+        if (message.Contains("HTTP 429", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Status: 429", StringComparison.OrdinalIgnoreCase))
+            return 429;
+
+        return null;
     }
 
     async Task<IReadOnlyList<SelectedChapter>> SelectChaptersAsync(RunSettings settings)
     {
         var storedBooks = await database.BibleBooks.ToListAsync();
         var byCode = storedBooks.ToDictionary(book => book.Code, StringComparer.OrdinalIgnoreCase);
-        var englishOrder = await EnglishOrderAsync();
-        if (!englishOrder.TryGetValue("JOS", out var joshuaOrder))
-            throw new LabelingException("The English book order has no Joshua.");
-
         var books = new List<BibleBook>(settings.BookCodes.Count);
         foreach (var code in settings.BookCodes)
         {
@@ -169,11 +294,6 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             if (stored.Count == 0)
                 throw new LabelingException($"{book.Code} has no verses.");
 
-            if (!englishOrder.TryGetValue(book.Code, out var bookOrder))
-                throw new LabelingException($"{book.Code} is not in the English book order.");
-
-            var beforeJoshua = bookOrder < joshuaOrder;
-
             var numbers = ChapterNumbers(book.Code, stored, settings.Range);
             var verses = await database.BibleVerses
                 .Where(verse => verse.BookId == book.Id && numbers.Contains(verse.Chapter))
@@ -185,7 +305,7 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 .ToDictionary(group => group.Key, group => (IReadOnlyList<BibleVerse>)group.ToList());
 
             foreach (var number in numbers)
-                selected.Add(new SelectedChapter(book, number, byChapter[number], beforeJoshua));
+                selected.Add(new SelectedChapter(book, number, byChapter[number]));
         }
 
         return selected;
@@ -212,19 +332,6 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         }
 
         return numbers;
-    }
-
-    async Task<Dictionary<string, int>> EnglishOrderAsync()
-    {
-        var rows = await (
-            from item in database.BookOrderItems
-            join bookOrder in database.BookOrders on item.BookOrderId equals bookOrder.Id
-            join book in database.BibleBooks on item.BookId equals book.Id
-            where bookOrder.Code == "ENG"
-            select new { book.Code, item.Order }
-        ).ToListAsync();
-
-        return rows.ToDictionary(row => row.Code, row => row.Order, StringComparer.OrdinalIgnoreCase);
     }
 
     async Task<LabelRun> InsertRunAsync(RunSettings settings, IReadOnlyList<SelectedChapter> chapters)
@@ -262,6 +369,74 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         return run;
     }
 
+    async Task<Dictionary<int, HashSet<string>>> RootNamesAsync(IReadOnlyCollection<VerseTag> seeds)
+    {
+        var tags = seeds.ToDictionary(tag => tag.Id);
+        var links = new List<VerseTagParent>();
+        var pending = seeds.Select(tag => tag.Id).ToHashSet();
+        while (pending.Count > 0)
+        {
+            var batch = pending.ToArray();
+            pending.Clear();
+            var found = await database.VerseTagParents
+                .Where(link => batch.Contains(link.TagId))
+                .ToListAsync();
+            links.AddRange(found);
+            var missing = found
+                .Select(link => link.ParentTagId)
+                .Distinct()
+                .Where(id => !tags.ContainsKey(id))
+                .ToArray();
+            if (missing.Length == 0)
+                continue;
+
+            var parents = await database.VerseTags
+                .Where(tag => missing.Contains(tag.Id))
+                .ToListAsync();
+            foreach (var parent in parents)
+                tags[parent.Id] = parent;
+
+            foreach (var id in missing)
+                pending.Add(id);
+        }
+
+        var byChild = links
+            .GroupBy(link => link.TagId)
+            .ToDictionary(group => group.Key, group => group.Select(link => link.ParentTagId).ToList());
+        var cache = new Dictionary<int, HashSet<string>>();
+
+        HashSet<string> Roots(int id, HashSet<int> stack)
+        {
+            if (cache.TryGetValue(id, out var found))
+                return found;
+
+            if (!stack.Add(id))
+                return [];
+
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            if (!byChild.TryGetValue(id, out var parents) || parents.Count == 0)
+            {
+                if (tags.TryGetValue(id, out var tag) && ChapterCheck.IsRoot(tag.Name))
+                    names.Add(tag.Name);
+            }
+            else
+            {
+                foreach (var parent in parents)
+                    names.UnionWith(Roots(parent, stack));
+            }
+
+            stack.Remove(id);
+            cache[id] = names;
+            return names;
+        }
+
+        var result = new Dictionary<int, HashSet<string>>();
+        foreach (var seed in seeds)
+            result[seed.Id] = Roots(seed.Id, []);
+
+        return result;
+    }
+
     async Task SaveChapterAsync(LabelRun run, SelectedChapter chapter, ChapterOutput output)
     {
         await using var transaction = await database.Database.BeginTransactionAsync();
@@ -269,28 +444,34 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         {
             var responseVerses = output.Verses ?? throw new LabelingException("Verses is absent.");
             var byVerse = responseVerses.ToDictionary(verse => verse.VerseNumber);
-            var names = (output.Tags ?? [])
-                .Select(tag => tag.Name)
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
+            var catalog = TagCatalog.Create(output.Tags);
+            var names = catalog.Tags.Select(tag => tag.Name!).Distinct(StringComparer.Ordinal).ToArray();
             var existing = await database.VerseTags
-                .Where(tag => names.Contains(tag.Name) && tag.Subclassifier == "")
+                .Where(tag => names.Contains(tag.Name))
                 .ToListAsync();
-            var byName = existing.ToDictionary(tag => tag.Name, StringComparer.Ordinal);
-            foreach (var name in names)
+            var rootsById = await RootNamesAsync(existing);
+            var byKey = existing.ToDictionary(tag => (tag.Name, tag.Subclassifier));
+            var bySource = new Dictionary<TagOutput, VerseTag>();
+            foreach (var tag in catalog.Tags)
             {
-                if (byName.ContainsKey(name!))
-                    continue;
+                var key = (Name: tag.Name!, Subclassifier: catalog.StoredSubclassifier(tag));
+                if (!byKey.TryGetValue(key, out var row))
+                {
+                    row = ReuseBare(key.Name, key.Subclassifier);
+                    if (row is null)
+                    {
+                        row = new VerseTag { Name = key.Name, Subclassifier = key.Subclassifier };
+                        database.VerseTags.Add(row);
+                        byKey.Add(key, row);
+                    }
+                }
 
-                var created = new VerseTag { Name = name!, Subclassifier = "" };
-                database.VerseTags.Add(created);
-                byName.Add(name!, created);
+                bySource[tag] = row;
             }
 
             await database.SaveChangesAsync();
 
-            var touchedIds = names.Select(name => byName[name!].Id).ToArray();
+            var touchedIds = bySource.Values.Select(tag => tag.Id).Distinct().ToArray();
             if (touchedIds.Length > 0)
             {
                 await database.VerseTagParents
@@ -298,12 +479,30 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                     .ExecuteDeleteAsync();
             }
 
-            foreach (var item in output.Tags ?? [])
+            VerseTag RequireTag(string text, IReadOnlyList<string?> context)
             {
-                if (string.IsNullOrWhiteSpace(item.Name))
-                    continue;
+                if (!catalog.TryResolve(text, context, out var match, out var error))
+                    throw new LabelingException($"Tag '{text}' {error}.");
 
-                var tagId = byName[item.Name].Id;
+                return bySource[match!];
+            }
+
+            VerseTag? ReuseBare(string name, string subclassifier)
+            {
+                if (subclassifier is not ("People" or "Places"))
+                    return null;
+
+                if (!byKey.TryGetValue((name, ""), out var bare))
+                    return null;
+
+                return rootsById.TryGetValue(bare.Id, out var roots) && roots.Count == 1 && roots.Contains(subclassifier)
+                    ? bare
+                    : null;
+            }
+
+            foreach (var item in catalog.Tags)
+            {
+                var tagId = bySource[item].Id;
                 foreach (var parentName in item.Parents ?? [])
                 {
                     if (string.IsNullOrWhiteSpace(parentName))
@@ -312,7 +511,7 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                     database.VerseTagParents.Add(new VerseTagParent
                     {
                         TagId = tagId,
-                        ParentTagId = byName[parentName].Id,
+                        ParentTagId = RequireTag(parentName, item.Parents!).Id,
                     });
                 }
             }
@@ -336,7 +535,7 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 var tags = byVerse[verse.VerseNumber].Tags!;
                 for (var index = 0; index < tags.Count; index++)
                 {
-                    var tag = byName[tags[index]!];
+                    var tag = RequireTag(tags[index]!, tags);
                     database.LabelRunTags.Add(new LabelRunTag
                     {
                         LabelRunId = run.Id,
@@ -423,4 +622,4 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         message.Replace(apiKey, "[api key]", StringComparison.Ordinal);
 }
 
-sealed record SelectedChapter(BibleBook Book, int Chapter, IReadOnlyList<BibleVerse> Verses, bool BeforeJoshua);
+sealed record SelectedChapter(BibleBook Book, int Chapter, IReadOnlyList<BibleVerse> Verses);

@@ -18,7 +18,7 @@ Use these names with the same meaning in every step.
 - Parent tag: a verse tag above another verse tag. A verse tag has no parents, or one or more parents.
 - Root tag: People or Places.
 - People tag: Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, or Antediluvian. People is its only parent.
-- Place tag: Israel or Non-Israel. Places is its only parent. A named place hangs under one of those.
+- Place tag: Non-Israel. Places is its only parent. A named place hangs under it. Israel can be a person or a place.
 - SummarySoFar: the summary of this book through the chapter that wrote it.
 - ImmediateContext: the topic text that the next chapter request needs.
 - Group name: a specific name for one group. The model writes it. It is not from a fixed list.
@@ -61,7 +61,7 @@ A step name with no design file is an error.
 - `Summary`: SummarySoFar for the first request of the run.
 - `ImmediateContext`: ImmediateContext for the first request of the run.
 - `Rpm`: the request limit.
-- `RetryDelaySeconds`: the wait before another attempt after HTTP 429. A missing value means 30.
+- `RetryDelaySeconds`: the wait before another attempt after HTTP 429 or HTTP 503. A missing value means 30.
 
 A future step adds one step name and one design file.
 `Design-Clear.MD` defines `clear-runs`.
@@ -98,12 +98,24 @@ This rule applies to every error.
 The program writes the error to the console.
 The program exits with a non-zero code.
 The program does not continue the run.
-HTTP 429 is the exception.
-The program waits `RetryDelaySeconds`, then sends that same request again.
-The program does this at most 3 times for continuous 429 responses.
-The fourth continuous 429 fails the run.
-A response that is not 429 sets that count back to zero.
+HTTP 429 and HTTP 503 are the exceptions.
+The program sends that same request again.
+The retry limit is `int.MaxValue` continuous 429 or 503 responses.
+The wait starts at `RetryDelaySeconds`.
+Every 3 continuous failures double that wait.
+Before each retry, the program writes the status, the retry number, and the wait.
+A response that is not 429 or 503 sets that count and that wait back to the start.
 Any other API failure fails immediately.
+One check failure is also retried.
+A verse tag that is not in `Tags` is that failure.
+The program sends the original input, that response, and the check error.
+It asks for a full JSON response.
+The message list keeps every question and every response in that chapter.
+The limit is 3 of those retries.
+The same request gap applies to each retry.
+Any other check failure fails immediately.
+The program writes the retry number before each of those retries.
+When the third retry still fails, the check failure stops the run.
 
 These cases are errors:
 
@@ -125,7 +137,9 @@ The program does not insert a run row when the error is in that validation.
 Every API response follows the next three rules.
 The program writes a response body to the raw file before it checks the body.
 The program does not write a raw file when the API returns no body.
-The program writes that raw file once.
+The program writes `raw/{bookCode}-{chapter}.txt` with the latest body.
+When the missing-tag retry runs, the program also writes `raw/{bookCode}-{chapter}-{attempt}.txt` for each body.
+`{attempt}` starts at 1.
 When the run row for this process exists, the program sets `Status` to `Failed` before it exits.
 The program does not change a run row that another process inserted.
 The program does not write the failed chapter to the success log.
@@ -211,7 +225,7 @@ The program does not copy ImmediateContext from the previous book.
 
 When `Rpm` is missing, the request limit is 15.
 When `Rpm` is present, it accepts one positive integer.
-When `RetryDelaySeconds` is missing, the 429 wait is 30 seconds.
+When `RetryDelaySeconds` is missing, the 429 or 503 wait is 30 seconds.
 When `RetryDelaySeconds` is present, it accepts one positive integer.
 That integer replaces the default.
 Zero, a negative integer, or a value that is not an integer is an error.
@@ -307,12 +321,15 @@ Columns:
 
 - `Id`: integer key.
 - `Name`: required text.
-- `Subclassifier`: required text. This step stores an empty string.
+- `Subclassifier`: required text. An empty string means the name is one tag, or the same name under different roots.
 
 The unique key is `Name`, then `Subclassifier`.
 The unique comparison is ordinal and case-sensitive.
-This step does not ask the model for a subclassifier.
-A later step can store two rows with the same `Name` when `Subclassifier` differs.
+The model writes a short `Subclassifier` when one name is two tags under the same root.
+The model leaves `Subclassifier` empty when one name is under People and the same name is under Places.
+EXAMPLE: Canaan the son of Ham has an empty `Subclassifier` and the parent Pre-Israelite.
+Canaan the land has an empty `Subclassifier` and the parent Non-Israel.
+Those names are examples. They are not required tags.
 
 A verse tag has no parents, or one or more parents.
 The parents are other verse tags.
@@ -345,6 +362,8 @@ Index `ParentTagId` on `VerseTagParent`.
 
 These rows are the real tags.
 A verse screen reads this table.
+When a verse has a tag and a parent of that tag, the verse screen shows those tags as one chain.
+The parent comes first.
 A tag screen also follows `VerseTagParent` and includes verses mapped to a descendant tag.
 
 Columns:
@@ -412,12 +431,15 @@ The unique key column order for the tag is `LabelRunId`, then `VerseId`, then `V
 Index `VerseId` on `LabelRunTag`.
 Index `VerseTagId` on `LabelRunTag`.
 
-The program creates a `VerseTag` when that name with an empty `Subclassifier` is absent.
+The program creates a `VerseTag` when that `Name` and `Subclassifier` pair is absent.
 The program reuses that `VerseTag` when the pair is present.
 The program replaces the parent links of each tag named in this chapter.
 The program does not change the parent links of a tag this chapter does not name.
 The latest chapter that names a tag decides that tag's parents.
-The program stores an empty `Subclassifier`.
+The program stores the model's `Subclassifier`, or an empty string when the model leaves it empty.
+When two tags share a name and an empty `Subclassifier` and their roots differ, the program stores the root name in `Subclassifier`.
+The screen shows that name without the root.
+A later chapter reuses an older row whose `Subclassifier` is empty when that row's root is the same root.
 The program does not merge names.
 EXAMPLE: Egypt and Egyptian stay as two tags.
 That pair is an example. It is not a required merge.
