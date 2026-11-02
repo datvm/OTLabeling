@@ -49,7 +49,7 @@ static class ChapterCheck
         }
     }
 
-    public static IReadOnlyList<string> Check(ChapterOutput output, IReadOnlyList<BibleVerse> verses)
+    public static IReadOnlyList<string> Check(ChapterOutput output, string bookCode, int chapter, IReadOnlyList<BibleVerse> verses)
     {
         var errors = new List<string>();
         if (output.Verses is null)
@@ -58,6 +58,7 @@ static class ChapterCheck
             return errors;
         }
 
+        var beforeIsrael = bookCode.Equals("GEN", StringComparison.OrdinalIgnoreCase) && chapter < 12;
         var expected = verses.Select(verse => verse.VerseNumber).ToHashSet();
         var seen = new HashSet<int>();
         foreach (var item in output.Verses)
@@ -67,7 +68,7 @@ static class ChapterCheck
             else if (!expected.Contains(item.VerseNumber))
                 errors.Add($"Verse {item.VerseNumber} is not in the chapter.");
 
-            CheckTags(item, errors);
+            CheckTags(item, beforeIsrael, errors);
         }
 
         foreach (var number in expected.Order())
@@ -85,7 +86,7 @@ static class ChapterCheck
         return errors;
     }
 
-    static void CheckTags(VerseOutput item, List<string> errors)
+    static void CheckTags(VerseOutput item, bool beforeIsrael, List<string> errors)
     {
         if (item.Tags is null)
         {
@@ -93,7 +94,6 @@ static class ChapterCheck
             return;
         }
 
-        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var tag in item.Tags)
         {
             if (string.IsNullOrWhiteSpace(tag))
@@ -102,13 +102,27 @@ static class ChapterCheck
                 continue;
             }
 
-            if (!seen.Add(tag))
-                errors.Add($"Verse {item.VerseNumber} repeats tag '{tag}'.");
+            if (beforeIsrael && tag == "Non-Israelite")
+                errors.Add($"Verse {item.VerseNumber} has Non-Israelite before Genesis 12.");
 
             var fixedName = FixedNames.FirstOrDefault(name =>
                 string.Equals(name, tag, StringComparison.OrdinalIgnoreCase));
             if (fixedName is not null && !string.Equals(fixedName, tag, StringComparison.Ordinal))
                 errors.Add($"Verse {item.VerseNumber} tag '{tag}' differs from {fixedName} only by letter case.");
+        }
+    }
+
+    public static void DistinctTags(ChapterOutput output)
+    {
+        if (output.Verses is null)
+            return;
+
+        foreach (var verse in output.Verses)
+        {
+            if (verse.Tags is null)
+                continue;
+
+            verse.Tags = verse.Tags.Distinct(StringComparer.Ordinal).ToList();
         }
     }
 

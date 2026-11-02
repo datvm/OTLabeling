@@ -11,6 +11,7 @@ sealed class RunSettings
     public required string Summary { get; init; }
     public required string ImmediateContext { get; init; }
     public required int Rpm { get; init; }
+    public required int RetryDelaySeconds { get; init; }
     public required string BaseUrl { get; init; }
     public required string Model { get; init; }
 
@@ -36,6 +37,7 @@ sealed class RunSettings
             Summary = NormalizeContext(labeling.Summary),
             ImmediateContext = NormalizeContext(labeling.ImmediateContext),
             Rpm = ReadRpm(labeling.Rpm),
+            RetryDelaySeconds = ReadRetryDelay(labeling.RetryDelaySeconds),
             BaseUrl = baseUrl,
             Model = model,
         };
@@ -137,6 +139,17 @@ sealed class RunSettings
             throw new LabelingException("Rpm must be a positive integer.");
 
         return rpm.Value;
+    }
+
+    static int ReadRetryDelay(int? seconds)
+    {
+        if (seconds is null)
+            return 30;
+
+        if (seconds <= 0)
+            throw new LabelingException("RetryDelaySeconds must be a positive integer.");
+
+        return seconds.Value;
     }
 
     static string NormalizeContext(string? value)

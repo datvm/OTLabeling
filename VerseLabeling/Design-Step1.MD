@@ -109,6 +109,8 @@ EXAMPLE: Israelites stays as a group name.
 EXAMPLE: Abraham stays as a person name.
 Those words are examples. They are not required tags.
 The program stores that name as the model wrote it.
+The program keeps one copy of a repeated tag name.
+The first copy keeps its place.
 The check fails in these cases:
 
 - A verse from the chapter is absent.
@@ -117,7 +119,7 @@ The check fails in these cases:
 - `Tags` is absent.
 - A tag name is blank.
 - A tag name is only spaces.
-- A tag name repeats in that verse.
+- Non-Israelite appears before Genesis 12.
 - `SummarySoFar` has no words.
 - `ImmediateContext` has no words.
 
@@ -138,6 +140,11 @@ When the check succeeds, the program writes that chapter to the database.
 `Design.MD` defines the run result rows and the real-tag update.
 The program appends that chapter to the log after the database transaction commits.
 The program sends the next request after that append.
+The program writes `{book code} {chapter} started.` before that request.
+The program writes `{book code} {chapter} done.` after that chapter commits.
+The program writes `{book code} {chapter} failed.` when that chapter fails.
+A failed run keeps every chapter that already committed.
+The failed chapter is not stored.
 
 ## Log files
 

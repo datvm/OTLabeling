@@ -5,6 +5,7 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
     public async Task RunAsync(RunSettings settings)
     {
         LabelRun? run = null;
+        SelectedChapter? current = null;
         try
         {
             var chapters = await SelectChaptersAsync(settings);
@@ -15,7 +16,7 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 "verse-labeling",
                 run.Step,
                 run.RunKey));
-            log.WriteSettings(run);
+            log.WriteSettings(run, settings.RetryDelaySeconds);
 
             var gap = TimeSpan.FromSeconds(60d / settings.Rpm);
             long? requestStart = null;
@@ -25,6 +26,8 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
 
             foreach (var chapter in chapters)
             {
+                current = chapter;
+                Console.WriteLine($"{chapter.Book.Code} {chapter.Chapter} started.");
                 var (summary, immediate) = ContextFor(chapter, ref bookCode, ref carriedSummary, ref carriedImmediate, settings);
                 var request = ChapterPrompt.Build(summary, immediate, chapter.Verses);
                 if (requestStart is long started)
@@ -35,14 +38,15 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 }
 
                 requestStart = Stopwatch.GetTimestamp();
-                var body = await SendAsync(request);
+                var body = await SendAsync(request, settings.RetryDelaySeconds);
                 log.WriteRaw(chapter.Book.Code, chapter.Chapter, body);
 
                 var output = ChapterCheck.Parse(body);
-                var errors = ChapterCheck.Check(output, chapter.Verses);
+                var errors = ChapterCheck.Check(output, chapter.Book.Code, chapter.Chapter, chapter.Verses);
                 if (errors.Count > 0)
                     throw new LabelingException("The check failed: " + string.Join(' ', errors));
 
+                ChapterCheck.DistinctTags(output);
                 await SaveChapterAsync(run, chapter, output);
                 var byVerse = output.Verses!.ToDictionary(verse => verse.VerseNumber);
                 log.AppendChapter(
@@ -54,13 +58,19 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                     output.ImmediateContext!);
                 carriedSummary = output.SummarySoFar;
                 carriedImmediate = output.ImmediateContext;
+                Console.WriteLine($"{chapter.Book.Code} {chapter.Chapter} done.");
             }
 
+            current = null;
             run.Status = LabelRun.StatusCompleted;
             await database.SaveChangesAsync();
+            Console.WriteLine("Run completed.");
         }
         catch (Exception ex)
         {
+            if (current is not null)
+                Console.WriteLine($"{current.Book.Code} {current.Chapter} failed.");
+
             await MarkFailedAsync(run);
             if (ex is LabelingException)
                 throw;
@@ -74,22 +84,56 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
     };
 
-    async Task<string> SendAsync(string request)
+    const int MaxContinuousRateLimits = 3;
+
+    int rateLimitStreak;
+
+    async Task<string> SendAsync(string request, int retryDelaySeconds)
     {
-        ChatResponse response;
-        try
+        var retryDelay = TimeSpan.FromSeconds(retryDelaySeconds);
+        while (true)
         {
-            response = await chat.GetResponseAsync<ChapterOutput>(request, ResponseSchema);
+            try
+            {
+                var response = await chat.GetResponseAsync<ChapterOutput>(request, ResponseSchema);
+                rateLimitStreak = 0;
+                if (string.IsNullOrEmpty(response.Text))
+                    throw new LabelingException("The API call returned no body.");
+
+                return response.Text;
+            }
+            catch (LabelingException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (IsTooManyRequests(ex))
+            {
+                rateLimitStreak++;
+                if (rateLimitStreak > MaxContinuousRateLimits)
+                    throw new LabelingException("The API call failed: " + Redact(ex.Message));
+
+                Console.WriteLine($"The API returned 429. The next attempt waits {retryDelaySeconds} seconds.");
+                await Task.Delay(retryDelay);
+            }
+            catch (Exception ex)
+            {
+                throw new LabelingException("The API call failed: " + Redact(ex.Message));
+            }
         }
-        catch (Exception ex)
+    }
+
+    static bool IsTooManyRequests(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
         {
-            throw new LabelingException("The API call failed: " + Redact(ex.Message));
+            if (current is System.ClientModel.ClientResultException client && client.Status == 429)
+                return true;
+
+            if (current is HttpRequestException http && http.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                return true;
         }
 
-        if (string.IsNullOrEmpty(response.Text))
-            throw new LabelingException("The API call returned no body.");
-
-        return response.Text;
+        return false;
     }
 
     async Task<IReadOnlyList<SelectedChapter>> SelectChaptersAsync(RunSettings settings)

@@ -16,7 +16,7 @@ sealed class RunLog
         this.folder = folder;
     }
 
-    public void WriteSettings(LabelRun run)
+    public void WriteSettings(LabelRun run, int retryDelaySeconds)
     {
         Directory.CreateDirectory(folder);
         var text = string.Join('\n',
@@ -25,6 +25,7 @@ sealed class RunLog
             $"books={run.Books}",
             $"chapters={run.Chapters}",
             $"rpm={run.Rpm}",
+            $"retryDelaySeconds={retryDelaySeconds}",
             $"baseUrl={run.BaseUrl}",
             $"model={run.Model}",
             $"startedUtc={run.RunKey}",

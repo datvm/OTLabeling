@@ -3,7 +3,7 @@
     "Translation": "BSB",
     "Ai": {
         "BaseUrl": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "Model": "gemini-2.5-flash-lite"
+        "Model": "gemini-3.1-flash-lite"
     },
     "VerseLabeling": {
         "Step": "label-is-israelites",
@@ -11,6 +11,7 @@
         "Chapters": "",
         "Summary": "",
         "ImmediateContext": "",
-        "Rpm": 15
+        "Rpm": 15,
+        "RetryDelaySeconds": 30
     }
 }

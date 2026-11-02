@@ -77,5 +77,6 @@ public record VerseLabelingConfig(
     string? Chapters,
     string? Summary,
     string? ImmediateContext,
-    int? Rpm
+    int? Rpm,
+    int? RetryDelaySeconds
 );

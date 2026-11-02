@@ -17,7 +17,9 @@ static class ChapterPrompt
         ### Non-Israelite
 
         Any person or group that the chapter text identifies as outside the Israelite line.
-        When the text names a specific group, include that group name and also include Non-Israelite.
+        Do not apply the Non-Israelite tag before Genesis 12.
+        Before Genesis 12, include the group name and do not include Non-Israelite.
+        When the text names a specific group from Genesis 12 onward, include that group name and also include Non-Israelite.
         When the text refers to a non-Israelite group that cannot be named from the supplied text, include both Non-Israelite and Unknown.
 
         ### Everyone
@@ -64,9 +66,10 @@ static class ChapterPrompt
         The array is empty when the verse refers to no person and no group.
         Include Israelite when the verse refers to Israelites.
         Include Non-Israelite when the verse refers to a group that is not Israelite.
+        Do not include Non-Israelite before Genesis 12.
         Israelite and Non-Israelite may both appear on one verse.
         Include each specific group name that the verse refers to.
-        Also include Non-Israelite when the array contains a specific non-Israelite group name.
+        From Genesis 12 onward, also include Non-Israelite when the array contains a specific non-Israelite group name.
         Include each specific person name that the verse refers to.
         A verse may include more than one person name.
         Include Everyone when the verse speaks of people in general.

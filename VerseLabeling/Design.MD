@@ -57,12 +57,14 @@ A step name with no design file is an error.
 - `Summary`: SummarySoFar for the first request of the run.
 - `ImmediateContext`: ImmediateContext for the first request of the run.
 - `Rpm`: the request limit.
+- `RetryDelaySeconds`: the wait before another attempt after HTTP 429. A missing value means 30.
 
 A future step adds one step name and one design file.
 
 Example of the two objects.
 The book list, the range, and the two texts are examples.
 `Rpm` 15 in the example is the default.
+`RetryDelaySeconds` 30 in the example is the default.
 Empty `BaseUrl` and `Model` show the shape before the real values exist.
 Those empty values are an error when the program starts.
 
@@ -77,7 +79,8 @@ Those empty values are an error when the program starts.
   "Chapters": "5-",
   "Summary": "",
   "ImmediateContext": "",
-  "Rpm": 15
+  "Rpm": 15,
+  "RetryDelaySeconds": 30
 }
 ```
 
@@ -87,7 +90,12 @@ This rule applies to every error.
 The program writes the error to the console.
 The program exits with a non-zero code.
 The program does not continue the run.
-The program does not start that request again.
+HTTP 429 is the exception.
+The program waits `RetryDelaySeconds`, then sends that same request again.
+The program does this at most 3 times for continuous 429 responses.
+The fourth continuous 429 fails the run.
+A response that is not 429 sets that count back to zero.
+Any other API failure fails immediately.
 
 These cases are errors:
 
@@ -195,6 +203,8 @@ The program does not copy ImmediateContext from the previous book.
 
 When `Rpm` is missing, the request limit is 15.
 When `Rpm` is present, it accepts one positive integer.
+When `RetryDelaySeconds` is missing, the 429 wait is 30 seconds.
+When `RetryDelaySeconds` is present, it accepts one positive integer.
 That integer replaces the default.
 Zero, a negative integer, or a value that is not an integer is an error.
 The program writes the error.
