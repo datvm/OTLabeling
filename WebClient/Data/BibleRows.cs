@@ -36,7 +36,9 @@ public sealed class BibleVerseRow
 static class TagText
 {
     public static bool HideRoot(string? subclassifier) =>
-        string.IsNullOrEmpty(subclassifier) || subclassifier is "People" or "Places";
+        string.IsNullOrEmpty(subclassifier)
+        || subclassifier is "People" or "God" or "Places"
+        || subclassifier.Contains('.');
 }
 
 public sealed class VerseTagRef

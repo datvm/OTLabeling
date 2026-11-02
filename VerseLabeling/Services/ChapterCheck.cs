@@ -5,15 +5,58 @@ static class ChapterCheck
     internal static readonly Dictionary<string, string?> FixedParent = new(StringComparer.Ordinal)
     {
         ["People"] = null,
+        ["God"] = null,
         ["Places"] = null,
         ["Israelite"] = "People",
         ["Non-Israelite"] = "People",
         ["Pre-Israelite"] = "People",
-        ["Everyone"] = "People",
-        ["Unknown"] = "People",
         ["Antediluvian"] = "People",
         ["Non-Israel"] = "Places",
     };
+
+    internal const int MaxSubclassifierLength = 40;
+
+    static readonly string[] LockedNamesLongestFirst =
+    [
+        "Non-Israelite",
+        "Pre-Israelite",
+        "Antediluvian",
+        "Non-Israel",
+        "Israelite",
+        "Others",
+        "People",
+        "Places",
+        "Israel",
+        "God",
+    ];
+
+    internal static bool IsLockedName(string name) =>
+        FixedParent.ContainsKey(name) || name is "Others" or "Israel";
+
+    internal static bool ClassifierOnLockedName(string name, out string locked)
+    {
+        foreach (var candidate in LockedNamesLongestFirst)
+        {
+            if (name.StartsWith(candidate + " (", StringComparison.Ordinal))
+            {
+                locked = candidate;
+                return true;
+            }
+        }
+
+        locked = "";
+        return false;
+    }
+
+    internal static bool IsOpenParentName(string name) =>
+        name is "God"
+            or "Antediluvian"
+            or "Pre-Israelite"
+            or "Israelite"
+            or "Non-Israelite"
+            or "Non-Israel"
+            or "Others"
+            or "Israel";
 
     static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -68,9 +111,9 @@ static class ChapterCheck
     {
         var errors = new List<string>();
         var beforeIsrael = bookCode.Equals("GEN", StringComparison.OrdinalIgnoreCase) && chapter < 12;
-        var catalog = TagCatalog.Create(output.Tags);
-        errors.AddRange(catalog.Errors);
-        foreach (var name in catalog.Names.Distinct(StringComparer.Ordinal))
+        var paths = TagPathSet.From(output.Verses);
+        errors.AddRange(paths.Errors);
+        foreach (var name in paths.Names)
         {
             if (beforeIsrael && (name == "Israelite" || name == "Non-Israelite"))
                 errors.Add($"{name} appears before Genesis 12.");
@@ -98,7 +141,6 @@ static class ChapterCheck
                 else if (!expected.Contains(item.VerseNumber))
                     errors.Add($"Verse {item.VerseNumber} is not in the chapter.");
 
-                CheckVerseTags(item, catalog, beforeIsrael, bookCode, errors);
             }
 
             foreach (var number in expected.Order())
@@ -119,30 +161,6 @@ static class ChapterCheck
 
     public static void DistinctTags(ChapterOutput output)
     {
-        if (output.Tags is not null)
-        {
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            var distinct = new List<TagOutput>();
-            foreach (var tag in output.Tags)
-            {
-                if (tag.Parents is not null)
-                    tag.Parents = tag.Parents.Distinct(StringComparer.Ordinal).ToList();
-
-                tag.Subclassifier = NormalizeSubclassifier(tag.Subclassifier);
-                if (string.IsNullOrWhiteSpace(tag.Name))
-                {
-                    distinct.Add(tag);
-                    continue;
-                }
-
-                var key = TagLabel(tag.Name, tag.Subclassifier) + "\n" + string.Join('\n', tag.Parents ?? []);
-                if (seen.Add(key))
-                    distinct.Add(tag);
-            }
-
-            output.Tags = distinct;
-        }
-
         if (output.Verses is null)
             return;
 
@@ -171,48 +189,6 @@ static class ChapterCheck
     public static string NormalizeSubclassifier(string? value) =>
         string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
 
-    static void CheckVerseTags(
-        VerseOutput item,
-        TagCatalog catalog,
-        bool beforeIsrael,
-        string bookCode,
-        List<string> errors)
-    {
-        if (item.Tags is null)
-        {
-            errors.Add($"Verse {item.VerseNumber} Tags is absent.");
-            return;
-        }
-
-        foreach (var tag in item.Tags)
-        {
-            if (string.IsNullOrWhiteSpace(tag))
-            {
-                errors.Add($"Verse {item.VerseNumber} has a blank tag.");
-                continue;
-            }
-
-            RejectFixedCase(tag, $"Verse {item.VerseNumber} tag '{tag}'", errors);
-            if (catalog.TryResolve(tag, item.Tags, out _, out var error))
-                continue;
-
-            errors.Add($"Verse {item.VerseNumber} tag '{tag}' {error}.");
-            if (error != "is not in Tags")
-                continue;
-
-            if (beforeIsrael && (tag == "Israelite" || tag == "Non-Israelite"))
-                errors.Add($"Verse {item.VerseNumber} has {tag} before Genesis 12.");
-
-            if (!beforeIsrael && tag == "Pre-Israelite")
-            {
-                errors.Add(bookCode.Equals("GEN", StringComparison.OrdinalIgnoreCase)
-                    ? $"Verse {item.VerseNumber} has Pre-Israelite from Genesis 12 onward."
-                    : $"Verse {item.VerseNumber} has Pre-Israelite outside Genesis 1-11.");
-            }
-        }
-    }
-
-
     internal static void RejectFixedCase(string tag, string label, List<string> errors)
     {
         var root = FixedParent.Keys.FirstOrDefault(name => string.Equals(name, tag, StringComparison.OrdinalIgnoreCase));
@@ -239,15 +215,12 @@ static class ChapterCheck
 
         foreach (var property in document.RootElement.EnumerateObject())
         {
-            RejectWrongCase(property.Name, "Tags", "Verses", "SummarySoFar", "ImmediateContext");
+            RejectWrongCase(property.Name, "Verses", "SummarySoFar", "ImmediateContext");
             if (property.NameEquals("SummarySoFar") && property.Value.ValueKind is not JsonValueKind.String and not JsonValueKind.Null)
                 throw new LabelingException("A JSON value has the wrong type.");
 
             if (property.NameEquals("ImmediateContext") && property.Value.ValueKind is not JsonValueKind.String and not JsonValueKind.Null)
                 throw new LabelingException("A JSON value has the wrong type.");
-
-            if (property.NameEquals("Tags"))
-                RejectTagCatalog(property.Value);
         }
 
         if (!document.RootElement.TryGetProperty("Verses", out var verses))
@@ -285,46 +258,6 @@ static class ChapterCheck
         }
     }
 
-    static void RejectTagCatalog(JsonElement tags)
-    {
-        if (tags.ValueKind is not JsonValueKind.Array and not JsonValueKind.Null)
-            throw new LabelingException("A JSON value has the wrong type.");
-
-        if (tags.ValueKind != JsonValueKind.Array)
-            return;
-
-        foreach (var item in tags.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.Object)
-                throw new LabelingException("A JSON value has the wrong type.");
-
-            foreach (var property in item.EnumerateObject())
-            {
-                RejectWrongCase(property.Name, "Name", "Parents", "Subclassifier");
-                if (property.NameEquals("Name") && property.Value.ValueKind is not JsonValueKind.String and not JsonValueKind.Null)
-                    throw new LabelingException("A JSON value has the wrong type.");
-
-                if (property.NameEquals("Subclassifier") && property.Value.ValueKind is not JsonValueKind.String and not JsonValueKind.Null)
-                    throw new LabelingException("A JSON value has the wrong type.");
-
-                if (!property.NameEquals("Parents"))
-                    continue;
-
-                if (property.Value.ValueKind is not JsonValueKind.Array and not JsonValueKind.Null)
-                    throw new LabelingException("A JSON value has the wrong type.");
-
-                if (property.Value.ValueKind != JsonValueKind.Array)
-                    continue;
-
-                foreach (var parent in property.Value.EnumerateArray())
-                {
-                    if (parent.ValueKind is not JsonValueKind.String and not JsonValueKind.Null)
-                        throw new LabelingException("A JSON value has the wrong type.");
-                }
-            }
-        }
-    }
-
     static void RejectWrongCase(string name, params string[] knownNames)
     {
         foreach (var known in knownNames)
@@ -341,7 +274,6 @@ static class ChapterCheck
 
 sealed class ChapterOutput
 {
-    public List<TagOutput>? Tags { get; set; }
     public List<VerseOutput>? Verses { get; set; }
     public string? SummarySoFar { get; set; }
     public string? ImmediateContext { get; set; }

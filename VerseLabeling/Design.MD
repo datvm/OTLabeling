@@ -16,9 +16,10 @@ Use these names with the same meaning in every step.
 - Request limit: the `Rpm` integer in the config. It is the maximum number of AI requests in 60 seconds.
 - Verse tag: a named mark on a verse. One verse can have many verse tags.
 - Parent tag: a verse tag above another verse tag. A verse tag has no parents, or one or more parents.
-- Root tag: People or Places.
-- People tag: Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, or Antediluvian. People is its only parent.
-- Place tag: Non-Israel. Places is its only parent. A named place hangs under it. Israel can be a person or a place.
+- Root tag: People, God, or Places.
+- People tag: Antediluvian, Pre-Israelite, Israelite, Non-Israelite, or Others. People is its only parent.
+- God tag: a name or title of God. God is its parent.
+- Place tag: Israel, Non-Israel, or Others. Places is its only parent. A named place hangs under one of those. Israel the person hangs under Israelite.
 - SummarySoFar: the summary of this book through the chapter that wrote it.
 - ImmediateContext: the topic text that the next chapter request needs.
 - Group name: a specific name for one group. The model writes it. It is not from a fixed list.
@@ -106,8 +107,8 @@ Every 3 continuous failures double that wait.
 Before each retry, the program writes the status, the retry number, and the wait.
 A response that is not 429 or 503 sets that count and that wait back to the start.
 Any other API failure fails immediately.
-One check failure is also retried.
-A verse tag that is not in `Tags` is that failure.
+A verse tag path check is retried.
+A chapter gate, a missing verse, or an empty summary still stops the run.
 The program sends the original input, that response, and the check error.
 It asks for a full JSON response.
 The message list keeps every question and every response in that chapter.
@@ -138,7 +139,7 @@ Every API response follows the next three rules.
 The program writes a response body to the raw file before it checks the body.
 The program does not write a raw file when the API returns no body.
 The program writes `raw/{bookCode}-{chapter}.txt` with the latest body.
-When the missing-tag retry runs, the program also writes `raw/{bookCode}-{chapter}-{attempt}.txt` for each body.
+When one of those check retries runs, the program also writes `raw/{bookCode}-{chapter}-{attempt}.txt` for each body.
 `{attempt}` starts at 1.
 When the run row for this process exists, the program sets `Status` to `Failed` before it exits.
 The program does not change a run row that another process inserted.
@@ -325,8 +326,15 @@ Columns:
 
 The unique key is `Name`, then `Subclassifier`.
 The unique comparison is ordinal and case-sensitive.
-The model writes a short `Subclassifier` when one name is two tags under the same root.
-The model leaves `Subclassifier` empty when one name is under People and the same name is under Places.
+The model writes a path on each verse tag.
+The program stores the last step as `Name`.
+The program stores a parent from the previous step.
+When one name is two tags under the same root, the model writes a short classifier on the last step.
+That classifier is at most 40 characters.
+A fixed step has no classifier.
+The fixed steps are People, God, Places, Antediluvian, Pre-Israelite, Israelite, Non-Israelite, Others, Israel, and Non-Israel.
+The model spells a fixed step exactly.
+People.Others and Places.Others are different paths, so the model leaves the classifier empty.
 EXAMPLE: Canaan the son of Ham has an empty `Subclassifier` and the parent Pre-Israelite.
 Canaan the land has an empty `Subclassifier` and the parent Non-Israel.
 Those names are examples. They are not required tags.

@@ -64,6 +64,7 @@ sealed class TagCatalog
         }
 
         catalog.LinkParents(errors);
+        catalog.RejectLockedShape(errors);
         catalog.FindCycles(errors);
         catalog.CollectRoots();
         catalog.RejectSharedNames(errors);
@@ -224,6 +225,74 @@ sealed class TagCatalog
 
         foreach (var item in pending)
             errors.Add($"Tag '{item.Entry.Label}' parent '{item.Parent}' matches more than one tag.");
+    }
+
+    void RejectLockedShape(List<string> errors)
+    {
+        foreach (var entry in entries)
+        {
+            if (entry.ParentsAbsent)
+                continue;
+
+            if (ChapterCheck.ClassifierOnLockedName(entry.Name, out var locked))
+            {
+                errors.Add($"Tag '{entry.Name}' puts a classifier on {locked}.");
+                continue;
+            }
+
+            if (entry.Subclassifier.Length > ChapterCheck.MaxSubclassifierLength)
+                errors.Add($"Tag '{entry.Name}' Subclassifier is too long.");
+
+            if (entry.Subclassifier.Length > 0 && ChapterCheck.IsLockedName(entry.Name))
+                errors.Add($"Tag '{entry.Name}' does not take a Subclassifier.");
+
+            if (entry.Name is "Unknown")
+            {
+                errors.Add("Tag 'Unknown' is not used. Use Others.");
+                continue;
+            }
+
+            if (entry.Name is "Everyone")
+            {
+                errors.Add("Tag 'Everyone' is not used.");
+                continue;
+            }
+
+            if (entry.Name == "Others")
+            {
+                if (entry.Parents.Count != 1 || entry.Parents[0] is not ("People" or "Places"))
+                    errors.Add("Tag 'Others' must have the parent People or Places.");
+
+                continue;
+            }
+
+            if (entry.Name == "Israel" && entry.Parents.Count == 1 && entry.Parents[0] == "Places")
+                continue;
+
+            if (ChapterCheck.FixedParent.ContainsKey(entry.Name))
+                continue;
+
+            if (links[entry.Id].Count == 0)
+                continue;
+
+            foreach (var parentId in links[entry.Id])
+            {
+                var parent = byId[parentId];
+                if (!IsOpenParent(parent))
+                    errors.Add($"Tag '{entry.Label}' cannot have the parent {parent.Label}.");
+            }
+        }
+    }
+
+    static bool IsOpenParent(Entry parent)
+    {
+        if (parent.Name is "People" or "Places")
+            return false;
+
+        if (ChapterCheck.IsOpenParentName(parent.Name))
+            return parent.Name != "Israel" || (parent.Parents.Count == 1 && parent.Parents[0] == "Places");
+
+        return !ChapterCheck.IsRoot(parent.Name);
     }
 
     void FindCycles(List<string> errors)

@@ -45,11 +45,11 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 var messages = new List<ChatMessage> { new(ChatRole.User, request) };
                 await WaitForTurnAsync();
                 var body = await SendAsync(messages, settings.RetryDelaySeconds);
-                var missingTagRetries = 0;
+                var checkRetries = 0;
                 ChapterOutput output;
                 while (true)
                 {
-                    log.WriteRaw(chapter.Book.Code, chapter.Chapter, body, missingTagRetries == 0 ? null : missingTagRetries + 1);
+                    log.WriteRaw(chapter.Book.Code, chapter.Chapter, body, checkRetries == 0 ? null : checkRetries + 1);
                     output = ChapterCheck.Parse(body);
                     ChapterCheck.DistinctTags(output);
                     var errors = ChapterCheck.Check(
@@ -61,22 +61,22 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                         break;
 
                     var joined = string.Join(' ', errors);
-                    if (!CanRetryMissingTag(errors))
+                    if (!CanRetryCheck(errors))
                         throw new LabelingException("The check failed: " + joined);
 
-                    if (missingTagRetries == MaxMissingTagRetries)
+                    if (checkRetries == MaxCheckRetries)
                     {
-                        Console.WriteLine($"The check retry limit of {MaxMissingTagRetries} was reached.");
+                        Console.WriteLine($"The check retry limit of {MaxCheckRetries} was reached.");
                         throw new LabelingException("The check failed: " + joined);
                     }
 
-                    if (missingTagRetries == 0)
+                    if (checkRetries == 0)
                         log.WriteRaw(chapter.Book.Code, chapter.Chapter, body, 1);
 
-                    missingTagRetries++;
-                    Console.WriteLine($"{chapter.Book.Code} {chapter.Chapter} check retry {missingTagRetries} of {MaxMissingTagRetries}. The check failed: {joined}");
+                    checkRetries++;
+                    Console.WriteLine($"{chapter.Book.Code} {chapter.Chapter} check retry {checkRetries} of {MaxCheckRetries}. The check failed: {joined}");
                     messages.Add(new ChatMessage(ChatRole.Assistant, body));
-                    messages.Add(new ChatMessage(ChatRole.User, MissingTagRetryMessage(request, body, errors)));
+                    messages.Add(new ChatMessage(ChatRole.User, CheckRetryMessage(request, body, errors)));
                     await WaitForTurnAsync();
                     body = await SendAsync(messages, settings.RetryDelaySeconds);
                 }
@@ -118,35 +118,53 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
     };
 
-    const int MaxMissingTagRetries = 3;
+    const int MaxCheckRetries = 3;
     const int MaxContinuousRetries = int.MaxValue;
     static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMilliseconds(int.MaxValue);
 
     int retryStreak;
 
-    static readonly string[] RetryableVerseErrors = [" is not in Tags."];
+    static bool CanRetryCheck(IReadOnlyList<string> errors) =>
+        errors.Count > 0 && errors.All(IsRetryableCheck);
 
-    static bool CanRetryMissingTag(IReadOnlyList<string> errors) =>
-        errors.All(error =>
-            error.StartsWith("Verse ", StringComparison.Ordinal) &&
-            RetryableVerseErrors.Any(suffix => error.EndsWith(suffix, StringComparison.Ordinal)));
+    static bool IsRetryableCheck(string error)
+    {
+        if (error.StartsWith("Verse ", StringComparison.Ordinal))
+        {
+            return error.Contains(" tag '", StringComparison.Ordinal)
+                || error.EndsWith(" has a blank tag.", StringComparison.Ordinal)
+                || error.EndsWith(" Tags is absent.", StringComparison.Ordinal);
+        }
 
-    static string MissingTagRetryMessage(string originalInput, string response, IReadOnlyList<string> errors) =>
-        string.Join('\n',
-        [
+        return error.StartsWith("Tag '", StringComparison.Ordinal);
+    }
+
+    static string CheckRetryMessage(string originalInput, string response, IReadOnlyList<string> errors)
+    {
+        var lines = new List<string>
+        {
             "The check failed: " + string.Join(' ', errors),
             "",
-            "A verse tag is missing from the Tags array.",
             "Return a full JSON response for the same chapter.",
-            "Put every verse tag into Tags, including its parents.",
-            "Do not return only the missing tags.",
-            "",
-            "Original input:",
-            originalInput,
-            "",
-            "Your response:",
-            response,
-        ]);
+            "Do not return a patch.",
+            "Do not return a Tags catalog.",
+            "Each verse tag is one path.",
+            "A path starts with People, God, or Places, and a dot separates each step.",
+            "Examples: People.Non-Israelite.Moabite, People.Others, Places.Others, Places.Non-Israel.Egypt.Goshen, God.LORD.",
+            "Israel the person is People.Israelite.Israel. Israel the land is Places.Israel.",
+            "Do not put a classifier on People, God, Places, Antediluvian, Pre-Israelite, Israelite, Non-Israelite, Others, Israel, or Non-Israel.",
+            "A classifier belongs on the last name only, and only when two tags would otherwise have the same path.",
+            "That phrase has at most 40 characters.",
+        };
+
+        lines.Add("");
+        lines.Add("Original input:");
+        lines.Add(originalInput);
+        lines.Add("");
+        lines.Add("Your response:");
+        lines.Add(response);
+        return string.Join('\n', lines);
+    }
 
     async Task<string> SendAsync(IReadOnlyList<ChatMessage> messages, int retryDelaySeconds)
     {
@@ -369,72 +387,129 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         return run;
     }
 
-    async Task<Dictionary<int, HashSet<string>>> RootNamesAsync(IReadOnlyCollection<VerseTag> seeds)
+    async Task<StoredTags> LoadNamedTagsAsync(string[] names)
     {
-        var tags = seeds.ToDictionary(tag => tag.Id);
-        var links = new List<VerseTagParent>();
-        var pending = seeds.Select(tag => tag.Id).ToHashSet();
-        while (pending.Count > 0)
+        var stored = new StoredTags();
+        if (names.Length == 0)
+            return stored;
+
+        var rows = await database.VerseTags.Where(tag => names.Contains(tag.Name)).ToListAsync();
+        var frontier = new List<int>();
+        foreach (var row in rows)
         {
-            var batch = pending.ToArray();
-            pending.Clear();
-            var found = await database.VerseTagParents
-                .Where(link => batch.Contains(link.TagId))
+            stored.Rows.Add(row);
+            stored.ById[row.Id] = row;
+            frontier.Add(row.Id);
+        }
+
+        while (frontier.Count > 0)
+        {
+            var links = await database.VerseTagParents
+                .Where(link => frontier.Contains(link.TagId))
                 .ToListAsync();
-            links.AddRange(found);
-            var missing = found
-                .Select(link => link.ParentTagId)
-                .Distinct()
-                .Where(id => !tags.ContainsKey(id))
-                .ToArray();
-            if (missing.Length == 0)
+            var missing = new List<int>();
+            foreach (var link in links)
+            {
+                if (!stored.ParentsByChild.TryGetValue(link.TagId, out var list))
+                {
+                    list = [];
+                    stored.ParentsByChild[link.TagId] = list;
+                }
+
+                list.Add(link.ParentTagId);
+                if (!stored.ById.ContainsKey(link.ParentTagId))
+                    missing.Add(link.ParentTagId);
+            }
+
+            var needed = missing.Distinct().ToArray();
+            if (needed.Length == 0)
+                break;
+
+            var parents = await database.VerseTags.Where(tag => needed.Contains(tag.Id)).ToListAsync();
+            frontier = [];
+            foreach (var parent in parents)
+            {
+                stored.ById[parent.Id] = parent;
+                frontier.Add(parent.Id);
+            }
+        }
+
+        return stored;
+    }
+
+    static VerseTag? FindStoredTag(StoredTags known, TagOutput tag, IReadOnlyList<string> parentNames)
+    {
+        var modelSub = ChapterCheck.NormalizeSubclassifier(tag.Subclassifier);
+        foreach (var row in known.Rows)
+        {
+            if (!string.Equals(row.Name, tag.Name, StringComparison.Ordinal))
                 continue;
 
-            var parents = await database.VerseTags
-                .Where(tag => missing.Contains(tag.Id))
-                .ToListAsync();
-            foreach (var parent in parents)
-                tags[parent.Id] = parent;
+            if (row.Id == 0)
+            {
+                if (modelSub.Length == 0 && parentNames.Count == 0 && row.Subclassifier.Length == 0)
+                    return row;
 
-            foreach (var id in missing)
-                pending.Add(id);
+                continue;
+            }
+
+            if (modelSub.Length > 0)
+            {
+                if (!string.Equals(row.Subclassifier, modelSub, StringComparison.Ordinal))
+                    continue;
+            }
+            else if (!IsPathKey(row.Subclassifier))
+            {
+                continue;
+            }
+
+            var chain = ParentChain(known, row.Id);
+            if (chain is not null && chain.SequenceEqual(parentNames))
+                return row;
         }
 
-        var byChild = links
-            .GroupBy(link => link.TagId)
-            .ToDictionary(group => group.Key, group => group.Select(link => link.ParentTagId).ToList());
-        var cache = new Dictionary<int, HashSet<string>>();
+        return null;
+    }
 
-        HashSet<string> Roots(int id, HashSet<int> stack)
+    static string StoredKey(TagOutput tag, IReadOnlyList<string> parentNames, StoredTags known)
+    {
+        var modelSub = ChapterCheck.NormalizeSubclassifier(tag.Subclassifier);
+        if (modelSub.Length > 0)
+            return modelSub;
+
+        var taken = known.Rows.Any(row => string.Equals(row.Name, tag.Name, StringComparison.Ordinal));
+        return taken ? string.Join('.', parentNames) : "";
+    }
+
+    static bool IsPathKey(string subclassifier) =>
+        subclassifier.Length == 0
+        || subclassifier is "People" or "God" or "Places"
+        || subclassifier.Contains('.');
+
+    static List<string>? ParentChain(StoredTags known, int id)
+    {
+        var names = new List<string>();
+        var guard = 0;
+        while (known.ParentsByChild.TryGetValue(id, out var parents))
         {
-            if (cache.TryGetValue(id, out var found))
-                return found;
+            if (parents.Count != 1 || !known.ById.TryGetValue(parents[0], out var parent))
+                return null;
 
-            if (!stack.Add(id))
-                return [];
-
-            var names = new HashSet<string>(StringComparer.Ordinal);
-            if (!byChild.TryGetValue(id, out var parents) || parents.Count == 0)
-            {
-                if (tags.TryGetValue(id, out var tag) && ChapterCheck.IsRoot(tag.Name))
-                    names.Add(tag.Name);
-            }
-            else
-            {
-                foreach (var parent in parents)
-                    names.UnionWith(Roots(parent, stack));
-            }
-
-            stack.Remove(id);
-            cache[id] = names;
-            return names;
+            names.Add(parent.Name);
+            id = parents[0];
+            if (++guard > 30)
+                return null;
         }
 
-        var result = new Dictionary<int, HashSet<string>>();
-        foreach (var seed in seeds)
-            result[seed.Id] = Roots(seed.Id, []);
+        names.Reverse();
+        return names;
+    }
 
-        return result;
+    sealed class StoredTags
+    {
+        public List<VerseTag> Rows { get; } = [];
+        public Dictionary<int, VerseTag> ById { get; } = [];
+        public Dictionary<int, List<int>> ParentsByChild { get; } = [];
     }
 
     async Task SaveChapterAsync(LabelRun run, SelectedChapter chapter, ChapterOutput output)
@@ -444,26 +519,23 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         {
             var responseVerses = output.Verses ?? throw new LabelingException("Verses is absent.");
             var byVerse = responseVerses.ToDictionary(verse => verse.VerseNumber);
-            var catalog = TagCatalog.Create(output.Tags);
-            var names = catalog.Tags.Select(tag => tag.Name!).Distinct(StringComparer.Ordinal).ToArray();
-            var existing = await database.VerseTags
-                .Where(tag => names.Contains(tag.Name))
-                .ToListAsync();
-            var rootsById = await RootNamesAsync(existing);
-            var byKey = existing.ToDictionary(tag => (tag.Name, tag.Subclassifier));
+            var paths = TagPathSet.From(output.Verses);
+            if (paths.Errors.Count > 0)
+                throw new LabelingException("The check failed: " + string.Join(' ', paths.Errors));
+
+            var names = paths.Tags.Select(tag => tag.Name!).Distinct(StringComparer.Ordinal).ToArray();
+            var known = await LoadNamedTagsAsync(names);
             var bySource = new Dictionary<TagOutput, VerseTag>();
-            foreach (var tag in catalog.Tags)
+            foreach (var tag in paths.Tags)
             {
-                var key = (Name: tag.Name!, Subclassifier: catalog.StoredSubclassifier(tag));
-                if (!byKey.TryGetValue(key, out var row))
+                var parentNames = paths.ParentNames[tag];
+                var row = FindStoredTag(known, tag, parentNames);
+                if (row is null)
                 {
-                    row = ReuseBare(key.Name, key.Subclassifier);
-                    if (row is null)
-                    {
-                        row = new VerseTag { Name = key.Name, Subclassifier = key.Subclassifier };
-                        database.VerseTags.Add(row);
-                        byKey.Add(key, row);
-                    }
+                    var subclassifier = StoredKey(tag, parentNames, known);
+                    row = new VerseTag { Name = tag.Name!, Subclassifier = subclassifier };
+                    database.VerseTags.Add(row);
+                    known.Rows.Add(row);
                 }
 
                 bySource[tag] = row;
@@ -479,41 +551,16 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                     .ExecuteDeleteAsync();
             }
 
-            VerseTag RequireTag(string text, IReadOnlyList<string?> context)
+            foreach (var item in paths.Tags)
             {
-                if (!catalog.TryResolve(text, context, out var match, out var error))
-                    throw new LabelingException($"Tag '{text}' {error}.");
+                if (!paths.ParentNode.TryGetValue(item, out var parent))
+                    continue;
 
-                return bySource[match!];
-            }
-
-            VerseTag? ReuseBare(string name, string subclassifier)
-            {
-                if (subclassifier is not ("People" or "Places"))
-                    return null;
-
-                if (!byKey.TryGetValue((name, ""), out var bare))
-                    return null;
-
-                return rootsById.TryGetValue(bare.Id, out var roots) && roots.Count == 1 && roots.Contains(subclassifier)
-                    ? bare
-                    : null;
-            }
-
-            foreach (var item in catalog.Tags)
-            {
-                var tagId = bySource[item].Id;
-                foreach (var parentName in item.Parents ?? [])
+                database.VerseTagParents.Add(new VerseTagParent
                 {
-                    if (string.IsNullOrWhiteSpace(parentName))
-                        continue;
-
-                    database.VerseTagParents.Add(new VerseTagParent
-                    {
-                        TagId = tagId,
-                        ParentTagId = RequireTag(parentName, item.Parents!).Id,
-                    });
-                }
+                    TagId = bySource[item].Id,
+                    ParentTagId = bySource[parent].Id,
+                });
             }
 
             var verseIds = chapter.Verses.Select(verse => verse.Id).ToArray();
@@ -535,7 +582,10 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 var tags = byVerse[verse.VerseNumber].Tags!;
                 for (var index = 0; index < tags.Count; index++)
                 {
-                    var tag = RequireTag(tags[index]!, tags);
+                    if (!paths.LeafByPath.TryGetValue(tags[index]!, out var leaf))
+                        throw new LabelingException($"Tag '{tags[index]}' is not a path.");
+
+                    var tag = bySource[leaf];
                     database.LabelRunTags.Add(new LabelRunTag
                     {
                         LabelRunId = run.Id,

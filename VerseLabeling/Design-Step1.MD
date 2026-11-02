@@ -8,10 +8,13 @@ This step does not write `VerseTagResolution`.
 This step writes a log.
 
 The root tags are People and Places.
-Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, and Antediluvian are children of People.
-Non-Israel is a child of Places.
+Antediluvian, Pre-Israelite, Israelite, Non-Israelite, and Others are children of People.
+God is a root tag. A name of God is a child of God.
+Israel, Non-Israel, and Others are children of Places.
 Non-Israel is a place outside the Promised Land, including every place before Joshua.
-Israel can be a person or a place. The check does not require its parent.
+Israel the place has Places as its only parent.
+Israel the person has Israelite as its parent.
+A free-form tag is not a direct child of People or Places.
 A person name is the name of one specific person.
 A place name is the name of one specific place.
 The model writes a person name and a place name.
@@ -103,15 +106,25 @@ The program checks the object before a success log and before the database write
 `Design.MD` defines the error rule.
 The program uses that rule when the call fails, when the body is not one JSON object, when a JSON value has the wrong type, and when this check fails.
 The program matches the property names in PascalCase only.
-The program accepts these property names: `Tags`, `Name`, `Subclassifier`, `Parents`, `Verses`, `VerseNumber`, `SummarySoFar`, and `ImmediateContext`.
+The program accepts these property names: `Verses`, `VerseNumber`, `Tags`, `SummarySoFar`, and `ImmediateContext`.
+A verse tag is a path.
+A path starts with People, God, or Places.
+A dot separates each step.
+EXAMPLE: `People.Non-Israelite.Moabite`.
+EXAMPLE: `People.Others`.
+EXAMPLE: `Places.Non-Israel.Egypt.Goshen`.
+The response does not include a tag catalog.
 The program ignores any other JSON property.
 
 The root tags are People and Places.
-The people tags are Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, and Antediluvian.
+The people tags are Antediluvian, Pre-Israelite, Israelite, Non-Israelite, and Others.
 People is the only parent of each people tag.
-The place tag is Non-Israel.
-Places is the only parent of Non-Israel.
-Israel can be a person name or a place name.
+God is a root tag.
+The place tags are Israel, Non-Israel, and Others.
+Places is the only parent of each place tag.
+The people tag Others and the place tag Others are different tags.
+Do not use Everyone.
+Do not use Unknown. Use Others.
 The check fails when a tag differs from one of these names only by letter case.
 Any other spelling stays as the model wrote it.
 That spelling may be a group name, a person name, or a place name.
@@ -120,39 +133,28 @@ EXAMPLE: Abraham stays as a person name.
 EXAMPLE: Goshen stays as a place name.
 Those words are examples. They are not required tags.
 The program stores that name as the model wrote it.
-`Subclassifier` is empty when the name is one tag.
-`Subclassifier` is empty when the same name has different roots.
-When one name is two tags under the same root, the model writes a short `Subclassifier` on each one.
-The verse tag is `Name` when `Subclassifier` is empty.
-The verse tag is `Name (Subclassifier)` when `Subclassifier` has text.
-A verse that uses a name under more than one root also lists a parent of the tag it means.
-The program keeps one copy of a repeated name in a verse `Tags` array and in a `Parents` array.
+The program keeps one copy of a repeated path in a verse `Tags` array.
 The first copy keeps its place.
-The same `Name` and `Subclassifier` repeated in the chapter `Tags` array fails the check.
-A repeated `Name` with an empty `Subclassifier` fails the check when those tags share a root.
-A repeated `Name` with an empty `Subclassifier` passes when the tags have different roots.
+Two paths that end with the same name and share a root need a short classifier on the last step.
+That classifier is at most 40 characters.
+A fixed step does not take a classifier.
+People.Others and Places.Others are different paths.
+People.Israelite.Israel and Places.Israel are different paths.
 The check fails in these cases:
 
 - A verse from the chapter is absent.
 - A verse number repeats.
 - A verse number is not in the chapter.
-- The chapter `Tags` array is absent.
 - A verse `Tags` array is absent.
-- A tag name is blank.
-- A tag name is only spaces.
-- A parent is blank.
-- A parent is absent from the chapter `Tags` array.
-- A parent matches more than one tag.
-- The same `Name` and `Subclassifier` are repeated in the chapter `Tags` array.
-- A repeated `Name` has an empty `Subclassifier`, and those tags share a root.
-- A verse tag matches more than one tag.
-- A root tag has a parent.
-- A people tag does not have People as its only parent.
-- A place tag Non-Israel does not have Places as its only parent.
-- A tag has no parent and is not a root tag.
-- A tag is its own parent or its own ancestor.
-- A tag has no path to a root tag.
-- A verse tag is absent from the chapter `Tags` array.
+- A verse tag is blank.
+- A verse tag is not a path.
+- A path does not start with People, God, or Places.
+- A free-form name is a direct step under People or Places.
+- A path adds a child under Others.
+- A locked step has a classifier. The locked steps are People, God, Places, Antediluvian, Pre-Israelite, Israelite, Non-Israelite, Others, Israel, and Non-Israel.
+- A classifier is longer than 40 characters.
+- Two paths end with the same name, share a root, and have no classifier.
+- The tag name is Everyone or Unknown.
 - Israelite or Non-Israelite appears before Genesis 12.
 - Pre-Israelite appears outside Genesis 1-11.
 - `SummarySoFar` has no words.
@@ -242,7 +244,8 @@ Fields: `BookCode`, `Chapter`, `SummarySoFar`, `ImmediateContext`.
 JSONL keeps commas and line breaks inside the two texts.
 
 The program writes `raw/{bookCode}-{chapter}.txt` for every response body.
-When a verse tag is not in `Tags`, the program asks again, up to 3 times.
+The program asks again, up to 3 times, when a verse tag path fails the check.
+A chapter gate, a missing verse, or an empty summary still stops the run.
 That request includes the original input, the response, and the check error.
 The message list keeps the earlier questions and responses.
 The program also writes `raw/{bookCode}-{chapter}-{attempt}.txt` for each of those bodies.

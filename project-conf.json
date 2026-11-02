@@ -6,8 +6,9 @@
         "Model": "gemini-3.1-flash-lite"
     },
     "VerseLabeling": {
+        //"Step": "clear-runs",
         "Step": "label-is-israelites",
-        "Books": ["ISA"],
+        "Books": [ "ISA" ],
         "Chapters": "",
         "Summary": "",
         "ImmediateContext": "",
