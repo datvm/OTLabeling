@@ -5,28 +5,16 @@
     return;
 }
 
-try
-{
-    await RunAsync();
-}
-catch (Exception ex)
-{
-    Console.WriteLine(ex.Message);
-    Environment.ExitCode = 1;
-}
+await RunAsync();
 
 static async Task RunAsync()
 {
-    var services = new ServiceCollection();
-    services.AddLabelingCommon();
     string? apiKey = null;
-    services.AddSingleton<IChatClient>(sp =>
-        ChatClientFactory.Create(sp.GetRequiredService<ConfigProvider>(), apiKey!));
+    await using var provider = (ServiceProvider)await CommonUtils.CreateServiceProviderAsync(services =>
+        services.AddSingleton<IChatClient>(sp =>
+            ChatClientFactory.Create(sp.GetRequiredService<ConfigProvider>(), apiKey!)));
 
-    await using var provider = services.BuildServiceProvider();
     var config = provider.GetRequiredService<ConfigProvider>();
-    await config.LoadAsync();
-
     var settings = RunSettings.Read(config.AppConfig);
     apiKey = ApiKeyReader.Read();
 

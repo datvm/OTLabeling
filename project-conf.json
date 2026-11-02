@@ -2,13 +2,13 @@
     "DbPath": "db/out/labeling.sqlite", // Output by code is in an ignored folder, manually copy it out in order to commit them.
     "Translation": "BSB",
     "Ai": {
-        "BaseUrl": "",
-        "Model": ""
+        "BaseUrl": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "Model": "gemini-2.5-flash-lite"
     },
     "VerseLabeling": {
         "Step": "label-is-israelites",
-        "Books": [],
-        "Chapters": "",
+        "Books": ["GEN"],
+        "Chapters": "12-13",
         "Summary": "",
         "ImmediateContext": "",
         "Rpm": 15

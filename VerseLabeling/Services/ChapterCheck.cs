@@ -100,7 +100,6 @@ static class ChapterCheck
         }
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        var hasEveryone = false;
         foreach (var tag in item.Tags)
         {
             if (string.IsNullOrWhiteSpace(tag))
@@ -116,13 +115,7 @@ static class ChapterCheck
                 string.Equals(name, tag, StringComparison.OrdinalIgnoreCase));
             if (fixedName is not null && !string.Equals(fixedName, tag, StringComparison.Ordinal))
                 errors.Add($"Verse {item.VerseNumber} tag '{tag}' differs from {fixedName} only by letter case.");
-
-            if (tag == "Everyone")
-                hasEveryone = true;
         }
-
-        if (hasEveryone && item.Tags.Count != 1)
-            errors.Add($"Verse {item.VerseNumber} has Everyone with another tag.");
     }
 
     static bool HasWords(string? text) =>

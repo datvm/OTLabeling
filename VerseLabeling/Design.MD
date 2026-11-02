@@ -251,6 +251,8 @@ Proposed Gemini base URL: `https://generativelanguage.googleapis.com/v1beta/open
 Proposed DeepSeek base URL: `https://api.deepseek.com`
 
 The step asks the client for one JSON object.
+The program sets the chat response format to a JSON schema for that object.
+The schema property names stay PascalCase.
 The object must match the schema in that step's design file.
 The step checks the object.
 The step writes a success log only after the check succeeds.
@@ -271,12 +273,13 @@ Add a `DbSet` for each one on `LabelingContext`.
 - `LabelRunTag`
 - `VerseTagResolution`
 
-Only the user creates the migration.
-Only the user applies the migration.
+Only the user creates the migration with the EF tools.
 
 The labeling program opens the database from `project-conf.json`.
-The program does not call `InitializeAsync`.
-The program does not migrate the database.
+The program calls `CommonUtils.CreateServiceProviderAsync`.
+That method loads the configuration.
+That method calls `InitializeAsync`.
+`InitializeAsync` applies pending migrations.
 
 ### VerseTag
 

@@ -86,12 +86,13 @@ When the text refers to a non-Israelite group that cannot be named from the supp
 
 ### Everyone
 
-Use Everyone only when the verse speaks of people in general and does not refer to any identifiable group.
-When Everyone is present it must be the only tag in the array.
-A verse that states a general principle but also refers to a specific group receives the specific tag(s), not Everyone.
+Use Everyone when the verse speaks of people in general.
+Everyone may be the only tag.
+Everyone may also share the array with other tags when the verse refers to a specific group as well.
+Example: Genesis 12:3 refers to Abraham and also to all the families of the earth. That verse receives Israelite and Everyone.
 
 Example: Psalm 34:15 says, “The eyes of the LORD are on the righteous.” The verse does not name Israelites, a foreign nation, or any other identifiable group.
-When Everyone is present, it is the only tag on that verse.
+That verse receives Everyone alone.
 
 ### Unknown
 
@@ -118,7 +119,8 @@ Include Non-Israelite when the verse refers to a group that is not Israelite.
 Israelite and Non-Israelite may both appear on one verse.
 Include each specific group name that the verse refers to.
 Also include Non-Israelite when the array contains a specific non-Israelite group name.
-Do not include Everyone when the tags name specific groups.
+Include Everyone when the verse speaks of people in general.
+Everyone may share the array with other tags.
 Write each tag name once.
 You may write a group name that this text does not list.
 
@@ -161,6 +163,7 @@ The program does not rewrite the output rules.
 The first copied line is the next paragraph.
 
 The model returns one JSON object.
+The program sends that object shape as the chat response format.
 The property names are PascalCase.
 The object has `Verses`, `SummarySoFar`, and `ImmediateContext`.
 
@@ -236,7 +239,6 @@ The check fails in these cases:
 - A tag name is blank.
 - A tag name is only spaces.
 - A tag name repeats in that verse.
-- Everyone shares the array with another tag.
 - `SummarySoFar` has no words.
 - `ImmediateContext` has no words.
 

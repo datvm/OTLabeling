@@ -1,4 +1,4 @@
-namespace VerseLabeling.Services;
+﻿namespace VerseLabeling.Services;
 
 sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, IChatClient chat, string apiKey)
 {
@@ -70,12 +70,17 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         }
     }
 
+    static readonly JsonSerializerOptions ResponseSchema = new()
+    {
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
+    };
+
     async Task<string> SendAsync(string request)
     {
         ChatResponse response;
         try
         {
-            response = await chat.GetResponseAsync(request);
+            response = await chat.GetResponseAsync<ChapterOutput>(request, ResponseSchema);
         }
         catch (Exception ex)
         {
