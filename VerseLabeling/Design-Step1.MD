@@ -114,6 +114,7 @@ Do not use Assimilated when the text does not describe the person or group as jo
 
 A verse has a `Tags` array.
 The array can contain more than one tag.
+The array is empty when the verse refers to no person and no group.
 Include Israelite when the verse refers to Israelites.
 Include Non-Israelite when the verse refers to a group that is not Israelite.
 Israelite and Non-Israelite may both appear on one verse.
@@ -169,6 +170,7 @@ The object has `Verses`, `SummarySoFar`, and `ImmediateContext`.
 
 Each item in `Verses` has `VerseNumber` and `Tags`.
 `Tags` is an array of tag names.
+An empty array means the verse refers to no person and no group.
 The model includes every verse of the chapter exactly once.
 The rules in "How to choose the tags" decide the array.
 
@@ -235,12 +237,14 @@ The check fails in these cases:
 - A verse number repeats.
 - A verse number is not in the chapter.
 - `Tags` is absent.
-- `Tags` is empty.
 - A tag name is blank.
 - A tag name is only spaces.
 - A tag name repeats in that verse.
 - `SummarySoFar` has no words.
 - `ImmediateContext` has no words.
+
+An empty `Tags` array passes the check.
+The verse refers to no person and no group.
 
 A failed check does not write that chapter to `verses.csv`.
 A failed check does not write that chapter to `chapters.jsonl`.

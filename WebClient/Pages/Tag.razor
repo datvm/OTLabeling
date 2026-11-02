@@ -1,11 +1,11 @@
-@page "/tags/{Id:int}"
+﻿@page "/tags/{Id:int}"
 @inject LabelingDatabase Db
 
 <PageTitle>@(tag?.Name ?? "Tag")</PageTitle>
 
 @if (error is not null)
 {
-    <div class="alert alert-danger" role="alert">@error</div>
+    <div class="alert alert-danger" role="alert">@(error)</div>
     <a class="btn btn-outline-secondary" href="tags">Back to tags</a>
 }
 else if (tag is null)
@@ -19,13 +19,13 @@ else
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="tags">Tags</a></li>
-            <li class="breadcrumb-item active" aria-current="page">@tag.Name</li>
+            <li class="breadcrumb-item active" aria-current="page">@(tag.Name)</li>
         </ol>
     </nav>
 
     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-        <h1 class="h3 mb-0">@tag.Name</h1>
-        <span class="badge text-bg-secondary">@tag.VerseCount</span>
+        <h1 class="h3 mb-0">@(tag.Name)</h1>
+        <span class="badge text-bg-secondary">@(tag.VerseCount)</span>
     </div>
 
     @if (verses is null)
@@ -44,17 +44,17 @@ else
         {
             var book = bookGroup.First();
             <h2 class="h5 mt-4">
-                <a href="@($"books/{book.BookCode}")">@book.BookName</a>
+                <a href="@($"books/{book.BookCode}")">@(book.BookName)</a>
             </h2>
             @foreach (var chapterGroup in bookGroup.GroupBy(verse => verse.Chapter))
             {
                 <h3 class="h6 mt-3">
-                    <a class="link-secondary" href="@($"books/{book.BookCode}?chapter={chapterGroup.Key}")">Chapter @chapterGroup.Key</a>
+                    <a class="link-secondary" href="@($"books/{book.BookCode}?chapter={chapterGroup.Key}")">Chapter @(chapterGroup.Key)</a>
                 </h3>
                 <div class="list-group">
                     @foreach (var verse in chapterGroup)
                     {
-                        <VerseRow VerseNumber="verse.VerseNumber" Text="verse.Text" Tags="verse.Tags" ActiveTagId="tag.Id" />
+                        <VerseRow VerseNumber="@(verse.VerseNumber)" Text="@(verse.Text)" Tags="@(verse.Tags)" ActiveTagId="@(tag.Id)" />
                     }
                 </div>
             }

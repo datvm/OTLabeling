@@ -93,12 +93,6 @@ static class ChapterCheck
             return;
         }
 
-        if (item.Tags.Count == 0)
-        {
-            errors.Add($"Verse {item.VerseNumber} Tags is empty.");
-            return;
-        }
-
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var tag in item.Tags)
         {

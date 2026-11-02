@@ -9,7 +9,7 @@
 {
     @if (error is not null)
     {
-        <div class="alert alert-danger" role="alert">@error</div>
+        <div class="alert alert-danger" role="alert">@(error)</div>
     }
     else
     {
@@ -28,8 +28,8 @@ else
         @foreach (var tag in tags)
         {
             <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-3" href="@($"tags/{tag.Id}")">
-                @tag.Name
-                <span class="badge text-bg-secondary">@tag.VerseCount</span>
+                @(tag.Name)
+                <span class="badge text-bg-secondary">@(tag.VerseCount)</span>
             </a>
         }
     </div>
