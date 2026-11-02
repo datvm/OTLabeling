@@ -80,9 +80,17 @@ public sealed class LabelingDatabase(IJSRuntime js)
     public Task<IReadOnlyList<VerseTagRow>> GetVerseTagsAsync()
         => QueryAsync<VerseTagRow>(
             """
-            SELECT t.Id, t.Name, COUNT(m.Id) AS VerseCount
+            WITH RECURSIVE Walk AS (
+                SELECT Id AS RootId, Id AS TagId FROM VerseTags
+                UNION
+                SELECT walk.RootId, child.TagId
+                FROM VerseTagParents child
+                INNER JOIN Walk walk ON walk.TagId = child.ParentTagId
+            )
+            SELECT t.Id, t.Name, COUNT(DISTINCT m.VerseId) AS VerseCount
             FROM VerseTags t
-            LEFT JOIN VerseTagMappings m ON m.VerseTagId = t.Id
+            LEFT JOIN Walk walk ON walk.RootId = t.Id
+            LEFT JOIN VerseTagMappings m ON m.VerseTagId = walk.TagId
             GROUP BY t.Id, t.Name
             ORDER BY t.Name
             """);
@@ -91,9 +99,17 @@ public sealed class LabelingDatabase(IJSRuntime js)
     {
         var rows = await QueryAsync<VerseTagRow>(
             """
-            SELECT t.Id, t.Name, COUNT(m.Id) AS VerseCount
+            WITH RECURSIVE Walk AS (
+                SELECT Id AS RootId, Id AS TagId FROM VerseTags
+                UNION
+                SELECT walk.RootId, child.TagId
+                FROM VerseTagParents child
+                INNER JOIN Walk walk ON walk.TagId = child.ParentTagId
+            )
+            SELECT t.Id, t.Name, COUNT(DISTINCT m.VerseId) AS VerseCount
             FROM VerseTags t
-            LEFT JOIN VerseTagMappings m ON m.VerseTagId = t.Id
+            LEFT JOIN Walk walk ON walk.RootId = t.Id
+            LEFT JOIN VerseTagMappings m ON m.VerseTagId = walk.TagId
             WHERE t.Id = ?
             GROUP BY t.Id, t.Name
             """,
@@ -101,10 +117,28 @@ public sealed class LabelingDatabase(IJSRuntime js)
         return rows.FirstOrDefault();
     }
 
+    public Task<IReadOnlyList<VerseTagRef>> GetVerseTagParentsAsync(int tagId)
+        => QueryAsync<VerseTagRef>(
+            """
+            SELECT p.Id, p.Name
+            FROM VerseTagParents link
+            INNER JOIN VerseTags p ON p.Id = link.ParentTagId
+            WHERE link.TagId = ?
+            ORDER BY p.Name
+            """,
+            tagId);
+
     public async Task<IReadOnlyList<TaggedVerseRow>> GetVersesForTagAsync(int tagId)
     {
         var rows = await QueryAsync<TaggedVerseLinkRow>(
             """
+            WITH RECURSIVE Descendants AS (
+                SELECT Id AS TagId FROM VerseTags WHERE Id = ?
+                UNION
+                SELECT child.TagId
+                FROM VerseTagParents child
+                INNER JOIN Descendants parent ON parent.TagId = child.ParentTagId
+            )
             SELECT b.Id AS BookId, b.Code AS BookCode, b.Name AS BookName,
                    v.Id AS VerseId, v.Chapter, v.VerseNumber, v.Text,
                    t.Id AS TagId, t.Name AS TagName
@@ -115,11 +149,15 @@ public sealed class LabelingDatabase(IJSRuntime js)
             INNER JOIN VerseTagMappings m ON m.VerseId = v.Id
             INNER JOIN VerseTags t ON t.Id = m.VerseTagId
             WHERE o.Code = ?
-              AND v.Id IN (SELECT VerseId FROM VerseTagMappings WHERE VerseTagId = ?)
+              AND v.Id IN (
+                  SELECT mapping.VerseId
+                  FROM VerseTagMappings mapping
+                  WHERE mapping.VerseTagId IN (SELECT TagId FROM Descendants)
+              )
             ORDER BY i."Order", v.Chapter, v.VerseNumber, m.TagIndex
             """,
-            DefaultBookOrderCode,
-            tagId);
+            tagId,
+            DefaultBookOrderCode);
 
         var verses = new List<TaggedVerseRow>();
         foreach (var group in rows.GroupBy(row => row.VerseId))

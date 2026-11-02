@@ -9,6 +9,7 @@ public class LabelingContext(DbContextOptions<LabelingContext> options) : DbCont
     public DbSet<BookOrder> BookOrders { get; set; }
     public DbSet<BookOrderItem> BookOrderItems { get; set; }
     public DbSet<VerseTag> VerseTags { get; set; }
+    public DbSet<VerseTagParent> VerseTagParents { get; set; }
     public DbSet<VerseTagMapping> VerseTagMappings { get; set; }
     public DbSet<LabelRun> LabelRuns { get; set; }
     public DbSet<LabelRunTag> LabelRunTags { get; set; }
@@ -19,9 +20,19 @@ public class LabelingContext(DbContextOptions<LabelingContext> options) : DbCont
         modelBuilder.Entity<VerseTag>(entity =>
         {
             entity.Property(tag => tag.Name).UseCollation("BINARY");
-            entity.HasOne(tag => tag.Parent)
-                .WithMany(tag => tag.Children)
-                .HasForeignKey(tag => tag.ParentId)
+            entity.Property(tag => tag.Subclassifier).UseCollation("BINARY");
+            entity.Property(tag => tag.Subclassifier).HasDefaultValue("");
+        });
+
+        modelBuilder.Entity<VerseTagParent>(entity =>
+        {
+            entity.HasOne<VerseTag>()
+                .WithMany()
+                .HasForeignKey(link => link.TagId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<VerseTag>()
+                .WithMany()
+                .HasForeignKey(link => link.ParentTagId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

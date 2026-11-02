@@ -42,11 +42,16 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 log.WriteRaw(chapter.Book.Code, chapter.Chapter, body);
 
                 var output = ChapterCheck.Parse(body);
-                var errors = ChapterCheck.Check(output, chapter.Book.Code, chapter.Chapter, chapter.Verses);
+                ChapterCheck.DistinctTags(output);
+                var errors = ChapterCheck.Check(
+                    output,
+                    chapter.Book.Code,
+                    chapter.Chapter,
+                    chapter.BeforeJoshua,
+                    chapter.Verses);
                 if (errors.Count > 0)
                     throw new LabelingException("The check failed: " + string.Join(' ', errors));
 
-                ChapterCheck.DistinctTags(output);
                 await SaveChapterAsync(run, chapter, output);
                 var byVerse = output.Verses!.ToDictionary(verse => verse.VerseNumber);
                 log.AppendChapter(
@@ -140,6 +145,10 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
     {
         var storedBooks = await database.BibleBooks.ToListAsync();
         var byCode = storedBooks.ToDictionary(book => book.Code, StringComparer.OrdinalIgnoreCase);
+        var englishOrder = await EnglishOrderAsync();
+        if (!englishOrder.TryGetValue("JOS", out var joshuaOrder))
+            throw new LabelingException("The English book order has no Joshua.");
+
         var books = new List<BibleBook>(settings.BookCodes.Count);
         foreach (var code in settings.BookCodes)
         {
@@ -160,6 +169,11 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             if (stored.Count == 0)
                 throw new LabelingException($"{book.Code} has no verses.");
 
+            if (!englishOrder.TryGetValue(book.Code, out var bookOrder))
+                throw new LabelingException($"{book.Code} is not in the English book order.");
+
+            var beforeJoshua = bookOrder < joshuaOrder;
+
             var numbers = ChapterNumbers(book.Code, stored, settings.Range);
             var verses = await database.BibleVerses
                 .Where(verse => verse.BookId == book.Id && numbers.Contains(verse.Chapter))
@@ -171,7 +185,7 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 .ToDictionary(group => group.Key, group => (IReadOnlyList<BibleVerse>)group.ToList());
 
             foreach (var number in numbers)
-                selected.Add(new SelectedChapter(book, number, byChapter[number]));
+                selected.Add(new SelectedChapter(book, number, byChapter[number], beforeJoshua));
         }
 
         return selected;
@@ -198,6 +212,19 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         }
 
         return numbers;
+    }
+
+    async Task<Dictionary<string, int>> EnglishOrderAsync()
+    {
+        var rows = await (
+            from item in database.BookOrderItems
+            join bookOrder in database.BookOrders on item.BookOrderId equals bookOrder.Id
+            join book in database.BibleBooks on item.BookId equals book.Id
+            where bookOrder.Code == "ENG"
+            select new { book.Code, item.Order }
+        ).ToListAsync();
+
+        return rows.ToDictionary(row => row.Code, row => row.Order, StringComparer.OrdinalIgnoreCase);
     }
 
     async Task<LabelRun> InsertRunAsync(RunSettings settings, IReadOnlyList<SelectedChapter> chapters)
@@ -242,13 +269,13 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         {
             var responseVerses = output.Verses ?? throw new LabelingException("Verses is absent.");
             var byVerse = responseVerses.ToDictionary(verse => verse.VerseNumber);
-            var names = responseVerses
-                .SelectMany(verse => verse.Tags ?? [])
-                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            var names = (output.Tags ?? [])
+                .Select(tag => tag.Name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
             var existing = await database.VerseTags
-                .Where(tag => names.Contains(tag.Name))
+                .Where(tag => names.Contains(tag.Name) && tag.Subclassifier == "")
                 .ToListAsync();
             var byName = existing.ToDictionary(tag => tag.Name, StringComparer.Ordinal);
             foreach (var name in names)
@@ -256,12 +283,39 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 if (byName.ContainsKey(name!))
                     continue;
 
-                var created = new VerseTag { Name = name! };
+                var created = new VerseTag { Name = name!, Subclassifier = "" };
                 database.VerseTags.Add(created);
                 byName.Add(name!, created);
             }
 
             await database.SaveChangesAsync();
+
+            var touchedIds = names.Select(name => byName[name!].Id).ToArray();
+            if (touchedIds.Length > 0)
+            {
+                await database.VerseTagParents
+                    .Where(link => touchedIds.Contains(link.TagId))
+                    .ExecuteDeleteAsync();
+            }
+
+            foreach (var item in output.Tags ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(item.Name))
+                    continue;
+
+                var tagId = byName[item.Name].Id;
+                foreach (var parentName in item.Parents ?? [])
+                {
+                    if (string.IsNullOrWhiteSpace(parentName))
+                        continue;
+
+                    database.VerseTagParents.Add(new VerseTagParent
+                    {
+                        TagId = tagId,
+                        ParentTagId = byName[parentName].Id,
+                    });
+                }
+            }
 
             var verseIds = chapter.Verses.Select(verse => verse.Id).ToArray();
             var resolved = await database.VerseTagResolutions
@@ -369,4 +423,4 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         message.Replace(apiKey, "[api key]", StringComparison.Ordinal);
 }
 
-sealed record SelectedChapter(BibleBook Book, int Chapter, IReadOnlyList<BibleVerse> Verses);
+sealed record SelectedChapter(BibleBook Book, int Chapter, IReadOnlyList<BibleVerse> Verses, bool BeforeJoshua);

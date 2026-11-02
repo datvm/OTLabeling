@@ -1,5 +1,5 @@
 ﻿#if DEBUG
-args = ["--metadata-only"];
+//args = ["--metadata-only"];
 #endif
 
 if (args.Any(arg => arg != "--metadata-only"))

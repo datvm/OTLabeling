@@ -1,14 +1,20 @@
 namespace Common.Entities;
 
-[Index(nameof(Name), IsUnique = true)]
-[Index(nameof(ParentId))]
+[Index(nameof(Name), nameof(Subclassifier), IsUnique = true)]
 public class VerseTag
 {
     public int Id { get; set; }
     public required string Name { get; set; }
-    public int? ParentId { get; set; }
-    public VerseTag? Parent { get; set; }
-    public ICollection<VerseTag> Children { get; set; } = [];
+    public string Subclassifier { get; set; } = "";
+}
+
+[Index(nameof(TagId), nameof(ParentTagId), IsUnique = true)]
+[Index(nameof(ParentTagId))]
+public class VerseTagParent
+{
+    public int Id { get; set; }
+    public int TagId { get; set; }
+    public int ParentTagId { get; set; }
 }
 
 [Index(nameof(VerseId), nameof(VerseTagId), IsUnique = true)]

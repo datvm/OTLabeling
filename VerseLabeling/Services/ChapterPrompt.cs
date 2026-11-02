@@ -4,85 +4,128 @@ static class ChapterPrompt
 {
     const string Rules = """
         Use only the chapter text supplied in this request, plus the SummarySoFar and ImmediateContext that this request supplies.
-        Do not add facts from other biblical books, from later history, or from your training data.
-        Spell Israelite, Non-Israelite, Everyone, Unknown, and Assimilated exactly as written in this request.
+        Do not add people, events, or places that those texts do not mention.
+        You may use the definition of the Promised Land in these rules to decide whether a named place is inside that land.
+        Spell People, Places, Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, Antediluvian, Israel, and Non-Israel exactly as written in this request.
 
-        ### Israelite
+        People and Places are the root tags.
+        A root tag has an empty Parents array.
+        A tag may have more than one parent.
+        Every parent is another tag in the same Tags array.
+        Follow parents until you reach a root tag.
+        The verse Tags array lists only the most specific tags for that verse.
+        A verse may list a person and a place together.
+        Do not also list a parent of a tag that is already on that verse.
+        The parents still belong to the verse through the Tags array.
+        A place name stays on the Places chain.
+        Do not reuse a place name as a people tag.
 
-        A person or group that belongs to the line of promise that begins with Abraham (Genesis 12) and continues through Isaac, Jacob, and their descendants.
-        Do not apply the Israelite tag before Genesis 12.
+        ### People
+
+        People is a root tag.
+        These tags are children of People, and People is their only parent: Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, and Antediluvian.
+
+        Israelite is a person or group in the line of promise that begins with Abraham in Genesis 12 and continues through Isaac, Jacob, and their descendants.
+        Use Israelite only from Genesis 12 onward.
+        Do not use Israelite before Genesis 12.
         Treat "Hebrew," "children of Israel," "house of Jacob," and similar expressions as Israelite when the chapter text or the SummarySoFar supplied in the request makes the identification clear.
-        Do not apply the tag on the basis of outside knowledge.
+        When the verse names a person or a more specific group in that line, that name is the verse tag, and Israelite is its parent.
 
-        ### Non-Israelite
+        Non-Israelite is a person or group that the chapter text identifies as outside the Israelite line.
+        Use Non-Israelite only from Genesis 12 onward.
+        Do not use Non-Israelite before Genesis 12.
+        When the text names a specific people, that people name is a tag and Non-Israelite is its parent.
+        The verse then lists the people name, not Non-Israelite.
+        Non-Israelite is the people tag. Non-Israel is the place tag. They are different tags.
 
-        Any person or group that the chapter text identifies as outside the Israelite line.
-        Do not apply the Non-Israelite tag before Genesis 12.
-        Before Genesis 12, include the group name and do not include Non-Israelite.
-        When the text names a specific group from Genesis 12 onward, include that group name and also include Non-Israelite.
-        When the text refers to a non-Israelite group that cannot be named from the supplied text, include both Non-Israelite and Unknown.
+        Pre-Israelite is a person or group in the text before Genesis 12.
+        Use Pre-Israelite only in Genesis chapters 1 through 11.
+        Do not use Pre-Israelite from Genesis 12 onward.
+        When the verse names a person or a people, that name is the verse tag, and Pre-Israelite is its parent.
+        Do not use Israelite or Non-Israelite for that person or people.
 
-        ### Everyone
+        Everyone means the verse speaks of people in general.
+        Everyone may be the only people tag on the verse.
+        Everyone may share the verse with another tag when the verse also refers to a specific person, people, or place.
+        Example: Genesis 12:3 refers to Abraham and also to all the families of the earth.
+        Abraham has the parent Israelite.
+        The verse lists Abraham and Everyone.
 
-        Use Everyone when the verse speaks of people in general.
-        Everyone may be the only tag.
-        Everyone may also share the array with other tags when the verse refers to a specific group as well.
-        Example: Genesis 12:3 refers to Abraham and also to all the families of the earth. That verse receives Israelite, Abraham, and Everyone.
+        Example: Psalm 34:15 says, "The eyes of the LORD are on the righteous."
+        The verse does not name a people or a place.
+        That verse lists Everyone.
 
-        Example: Psalm 34:15 says, “The eyes of the LORD are on the righteous.” The verse does not name Israelites, a foreign nation, or any other identifiable group.
-        That verse receives Everyone alone.
+        Unknown is for a group of people that the supplied chapter, SummarySoFar, and ImmediateContext never name and never place.
+        From Genesis 12 onward, the verse lists Unknown and Non-Israelite when that group is outside the Israelite line.
+        Before Genesis 12, the verse lists Unknown and Pre-Israelite.
+        A place of origin is enough. Do not use Unknown when the supplied text says where the group is from.
+        Example: the shepherds in Genesis 29 say that they are from Haran.
+        Haran is a place. Its parent is Non-Israel.
+        The shepherds are Non-Israelite.
+        Those verses list Haran, and they do not list Unknown.
+        Use that identification for every verse in the chapter that refers to those shepherds, including the verses before the sentence that names Haran.
+        A servant, steward, or attendant of a named person is not Unknown.
+        Example: Genesis 15 speaks of a nation that the supplied text does not name and does not place. That nation is Unknown.
 
-        ### Unknown
-
-        Use Unknown (together with Non-Israelite) when the verse refers to a non-Israelite group and the supplied text does not give a name for that group.
-
-        The model writes Unknown when the verse refers to a non-Israelite group and the model cannot name that group.
-        The model also writes Non-Israelite on that verse.
-
-        ### Assimilated
-
-        A free-form group name that always appears together with the Israelite role tag.
-        Use it for a person or group who was not originally Israelite but who is described in the supplied text as joining or becoming part of the Israelite community.
-        Also include the original group name when the text gives one.
-        Example: Ruth is a Moabite who joins the community of Israel. A verse that describes her as doing so receives the tags `["Israelite", "Assimilated", "Moabite"]`.
-        Do not use Assimilated as a substitute for Israelite.
-        Do not use Assimilated when the text does not describe the person or group as joining the community.
-
-        ### Person
+        Antediluvian is a person or group that the supplied text places before the flood.
+        It may be a second parent beside Pre-Israelite.
+        Example: Lamech has the parents Pre-Israelite and Antediluvian.
+        The verse lists Lamech only.
 
         Include a tag for each specific person the verse refers to.
         Use that person's name.
         A verse may refer to more than one person.
-        Include each of those names.
-        Example: a verse that refers to Abraham and Lot receives Abraham and Lot.
+        Include each of those names when neither name is a parent of the other.
+        Example: a verse that refers to Abraham and Lot lists Abraham and Lot.
+        Abraham has the parent Israelite.
+        Lot has the parent Non-Israelite when the supplied text places him outside the Israelite line.
         Those names are examples. They are not a required list.
-        Do not add a person from outside knowledge.
-        Use only the chapter text, the SummarySoFar, and the ImmediateContext supplied in this request.
+        Do not add a person that the supplied text does not mention.
+
+        ### Places
+
+        Places is a root tag.
+        Israel and Non-Israel are its children. Places is their only parent.
+        Israel is the Promised Land Joshua entered, either the whole land or a part of it.
+        Use the place tag Israel only from the book of Joshua onward.
+        Before that land is given to Joshua, every place is Non-Israel.
+        This includes the land the spies enter.
+        From Joshua onward, a place inside that land has Israel as its parent.
+        A place outside that land has Non-Israel as its parent.
+        A named place has the nearer place as its parent when the supplied text gives one.
+        The verse lists the most specific place.
+        Example: in Genesis 47, Goshen is inside Egypt, and the land has not been given to Joshua.
+        Non-Israel is the parent of Egypt.
+        Egypt is the parent of Goshen.
+        The verse lists Goshen.
+        A verse that refers to the whole Promised Land from Joshua onward, with no smaller place, lists Israel.
 
         ### How to choose the tags
 
-        A verse has a `Tags` array.
-        The array can contain more than one tag.
-        The array is empty when the verse refers to no person and no group.
-        Include Israelite when the verse refers to Israelites.
-        Include Non-Israelite when the verse refers to a group that is not Israelite.
-        Do not include Non-Israelite before Genesis 12.
-        Israelite and Non-Israelite may both appear on one verse.
-        Include each specific group name that the verse refers to.
-        From Genesis 12 onward, also include Non-Israelite when the array contains a specific non-Israelite group name.
-        Include each specific person name that the verse refers to.
-        A verse may include more than one person name.
-        Include Everyone when the verse speaks of people in general.
-        Everyone may share the array with other tags.
-        Write each tag name once.
-        You may write a group name that this text does not list.
-        You may write a person name that this text does not list.
+        Put every tag used by the chapter into the Tags array, including each parent, up to a root tag.
+        Each item has Name and Parents.
+        Parents is an array of tag names.
+        People and Places have empty Parents arrays.
+        Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, and Antediluvian have the parent People.
+        Israel and Non-Israel have the parent Places.
+        Any other tag has one or more parents.
+        Write each tag name once in Tags.
+        A people name, a person name, or a place name may be absent from this instruction.
+        It must appear in the supplied chapter, SummarySoFar, or ImmediateContext.
 
-        EXAMPLE: a judgment on Egypt and Cush has the tags Non-Israelite, Egypt, and Cushite.
-        EXAMPLE: Israelites who fight Egypt and Cush have the tags Israelite, Non-Israelite, Egypt, and Cush.
-        EXAMPLE: a verse that refers to Abraham and Lot has the tags Abraham and Lot.
-        These examples show the array. They are not required test verses.
-        The names in the examples are not a fixed list.
+        Each verse has its own Tags array of names.
+        That array lists only the most specific tags.
+        The array is empty when the verse refers to no person, no people, and no place.
+        Do not put a tag and one of its parents on the same verse.
+
+        Example: Ruth belongs to Israel and to Moab.
+        Moabite has the parent Non-Israelite.
+        Ruth has the parents Israelite and Moabite.
+        The verse lists Ruth only.
+
+        Example: a verse before Genesis 12 that names Japheth lists Japheth.
+        Japheth has the parent Pre-Israelite.
+        These examples show the shape. They are not required test verses.
 
         ### How to write SummarySoFar
 
@@ -99,30 +142,35 @@ static class ChapterPrompt
 
         The model returns one JSON object.
         The property names are PascalCase.
-        The object has `Verses`, `SummarySoFar`, and `ImmediateContext`.
+        The object has Tags, Verses, SummarySoFar, and ImmediateContext.
 
-        Each item in `Verses` has `VerseNumber` and `Tags`.
-        `Tags` is an array of tag names.
-        Include each specific person name in that array.
-        A verse may include more than one person name.
-        An empty array means the verse refers to no person and no group.
-        The model includes every verse of the chapter exactly once.
-        The rules in "How to choose the tags" decide the array.
+        Tags lists each tag used in the chapter.
+        Each item has Name and Parents.
+        Verses includes every verse of the chapter exactly once.
+        Each item has VerseNumber and Tags.
+        The verse Tags array lists the most specific tag names.
+        An empty array means the verse refers to no person, no people, and no place.
 
-        `SummarySoFar` is the book summary through this chapter.
-        `ImmediateContext` is the topic text for the next chapter.
+        SummarySoFar is the book summary through this chapter.
+        ImmediateContext is the topic text for the next chapter.
         Both texts must contain words.
 
         Example of the object shape.
-        The verse number and the tag names in it are examples.
+        The names in it are examples.
 
         ```json
         {
+          "Tags": [
+            { "Name": "People", "Parents": [] },
+            { "Name": "Places", "Parents": [] },
+            { "Name": "Israelite", "Parents": ["People"] },
+            { "Name": "Non-Israel", "Parents": ["Places"] },
+            { "Name": "Egypt", "Parents": ["Non-Israel"] },
+            { "Name": "Goshen", "Parents": ["Egypt"] },
+            { "Name": "Jacob", "Parents": ["Israelite"] }
+          ],
           "Verses": [
-            {
-              "VerseNumber": 1,
-              "Tags": ["Israelite", "Abraham", "Non-Israelite", "Lot"]
-            }
+            { "VerseNumber": 1, "Tags": ["Jacob", "Goshen"] }
           ],
           "SummarySoFar": "{text}",
           "ImmediateContext": "{text}"

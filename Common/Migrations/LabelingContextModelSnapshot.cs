@@ -261,15 +261,17 @@ namespace Common.Migrations
                         .HasColumnType("TEXT")
                         .UseCollation("BINARY");
 
-                    b.Property<int?>("ParentId")
-                        .HasColumnType("INTEGER");
+                    b.Property<string>("Subclassifier")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("")
+                        .UseCollation("BINARY");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("Name", "Subclassifier")
                         .IsUnique();
-
-                    b.HasIndex("ParentId");
 
                     b.ToTable("VerseTags");
                 });
@@ -300,6 +302,28 @@ namespace Common.Migrations
                         .IsUnique();
 
                     b.ToTable("VerseTagMappings");
+                });
+
+            modelBuilder.Entity("Common.Entities.VerseTagParent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ParentTagId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TagId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentTagId");
+
+                    b.HasIndex("TagId", "ParentTagId")
+                        .IsUnique();
+
+                    b.ToTable("VerseTagParents");
                 });
 
             modelBuilder.Entity("Common.Entities.VerseTagResolution", b =>
@@ -407,16 +431,6 @@ namespace Common.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Common.Entities.VerseTag", b =>
-                {
-                    b.HasOne("Common.Entities.VerseTag", "Parent")
-                        .WithMany("Children")
-                        .HasForeignKey("ParentId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Parent");
-                });
-
             modelBuilder.Entity("Common.Entities.VerseTagMapping", b =>
                 {
                     b.HasOne("Common.Entities.BibleVerse", null)
@@ -428,6 +442,21 @@ namespace Common.Migrations
                     b.HasOne("Common.Entities.VerseTag", null)
                         .WithMany()
                         .HasForeignKey("VerseTagId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Common.Entities.VerseTagParent", b =>
+                {
+                    b.HasOne("Common.Entities.VerseTag", null)
+                        .WithMany()
+                        .HasForeignKey("ParentTagId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Common.Entities.VerseTag", null)
+                        .WithMany()
+                        .HasForeignKey("TagId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -476,11 +505,6 @@ namespace Common.Migrations
             modelBuilder.Entity("Common.Entities.BookOrder", b =>
                 {
                     b.Navigation("Items");
-                });
-
-            modelBuilder.Entity("Common.Entities.VerseTag", b =>
-                {
-                    b.Navigation("Children");
                 });
 #pragma warning restore 612, 618
         }

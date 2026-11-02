@@ -15,6 +15,15 @@ static async Task RunAsync()
             ChatClientFactory.Create(sp.GetRequiredService<ConfigProvider>(), apiKey!)));
 
     var config = provider.GetRequiredService<ConfigProvider>();
+    var step = config.AppConfig.VerseLabeling?.Step?.Trim();
+    if (step == ClearRuns.StepName)
+    {
+        await using var clearScope = provider.CreateAsyncScope();
+        var clearDatabase = clearScope.ServiceProvider.GetRequiredService<LabelingContext>();
+        await ClearRuns.RunAsync(clearDatabase, config);
+        return;
+    }
+
     var settings = RunSettings.Read(config.AppConfig);
     apiKey = ApiKeyReader.Read();
 

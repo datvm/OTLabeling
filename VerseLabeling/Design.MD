@@ -15,12 +15,15 @@ Use these names with the same meaning in every step.
 - Step: one labeling task. The config field `Step` selects it.
 - Request limit: the `Rpm` integer in the config. It is the maximum number of AI requests in 60 seconds.
 - Verse tag: a named mark on a verse. One verse can have many verse tags.
-- Parent tag: the verse tag above another verse tag. A verse tag has no parent, or one parent.
+- Parent tag: a verse tag above another verse tag. A verse tag has no parents, or one or more parents.
+- Root tag: People or Places.
+- People tag: Israelite, Non-Israelite, Pre-Israelite, Everyone, Unknown, or Antediluvian. People is its only parent.
+- Place tag: Israel or Non-Israel. Places is its only parent. A named place hangs under one of those.
 - SummarySoFar: the summary of this book through the chapter that wrote it.
 - ImmediateContext: the topic text that the next chapter request needs.
-- Role tag: Israelite, Non-Israelite, or Everyone.
 - Group name: a specific name for one group. The model writes it. It is not from a fixed list.
 - Person name: a specific name for one person. The model writes it. It is not from a fixed list.
+- Place name: a specific name for one place. The model writes it. It is not from a fixed list.
 - Run: one execution of one step. The table is `LabelRun`.
 - Run result: the tags one run gave one verse. The table is `LabelRunTag`.
 - Real tags: the tags a screen reads for a verse. The table is `VerseTagMapping`.
@@ -43,7 +46,8 @@ A JSON null follows the same rule as a missing value.
 `Ai` holds `BaseUrl` and `Model`.
 `VerseLabeling` holds the run settings.
 The API key is not in this file.
-A missing `Ai` object is an error.
+A missing `Ai` object is an error for `label-is-israelites`.
+`clear-runs` does not read `Ai` or the API key.
 A missing `VerseLabeling` object is an error.
 A missing `Step` is an error.
 A blank `Step` is an error.
@@ -51,7 +55,7 @@ A step name with no design file is an error.
 
 `VerseLabeling` fields:
 
-- `Step`: the step name. Step 1 uses `label-is-israelites`.
+- `Step`: the step name. Step 1 uses `label-is-israelites`. The clear step uses `clear-runs`.
 - `Books`: the book codes, in run order.
 - `Chapters`: the chapter range. An empty value selects every chapter.
 - `Summary`: SummarySoFar for the first request of the run.
@@ -60,13 +64,17 @@ A step name with no design file is an error.
 - `RetryDelaySeconds`: the wait before another attempt after HTTP 429. A missing value means 30.
 
 A future step adds one step name and one design file.
+`Design-Clear.MD` defines `clear-runs`.
+That step deletes labeling rows and run logs.
+That step keeps `BibleBook`, `BibleVerse`, and the book metadata.
+That step does not call the API.
 
 Example of the two objects.
 The book list, the range, and the two texts are examples.
 `Rpm` 15 in the example is the default.
 `RetryDelaySeconds` 30 in the example is the default.
 Empty `BaseUrl` and `Model` show the shape before the real values exist.
-Those empty values are an error when the program starts.
+Those empty values are an error when `label-is-israelites` starts.
 
 ```json
 "Ai": {
@@ -279,6 +287,7 @@ Add these entities in the Common project, with the other entities.
 Add a `DbSet` for each one on `LabelingContext`.
 
 - `VerseTag`
+- `VerseTagParent`
 - `VerseTagMapping`
 - `LabelRun`
 - `LabelRunTag`
@@ -297,30 +306,46 @@ That method calls `InitializeAsync`.
 Columns:
 
 - `Id`: integer key.
-- `Name`: required text. The name is unique.
-- `ParentId`: null, or the `Id` of the parent tag.
+- `Name`: required text.
+- `Subclassifier`: required text. This step stores an empty string.
 
-The unique comparison on `Name` is ordinal and case-sensitive.
-A verse tag has no parent, or one parent.
-The parent is another verse tag.
+The unique key is `Name`, then `Subclassifier`.
+The unique comparison is ordinal and case-sensitive.
+This step does not ask the model for a subclassifier.
+A later step can store two rows with the same `Name` when `Subclassifier` differs.
+
+A verse tag has no parents, or one or more parents.
+The parents are other verse tags.
 A child tag can also be a parent.
-`ParentId` must not be the `Id` of the same tag.
-`ParentId` must not be the `Id` of a descendant of that tag.
+The program rejects a tag that is its own parent.
+The program rejects a tag that is its own ancestor.
 
-EXAMPLE: Non-Israelite is the parent of Amorite and of Jebusite.
+EXAMPLE: Non-Israelite is a parent of Moabite.
+Israelite and Moabite are parents of Ruth.
 Those names are examples. They are not the catalog.
 
-The database rejects a delete of a tag that still has a child.
+The database rejects a delete of a tag that is still a parent or a child.
 The database rejects a delete of a tag that still has a verse mapping.
 The database rejects a delete of a tag that still has a run result.
 
-Index `ParentId` on `VerseTag`.
+### VerseTagParent
+
+One row is one parent of one verse tag.
+
+Columns:
+
+- `Id`: integer key.
+- `TagId`: required foreign key to `VerseTag`. The child tag.
+- `ParentTagId`: required foreign key to `VerseTag`. The parent tag.
+
+The unique key is `TagId`, then `ParentTagId`.
+Index `ParentTagId` on `VerseTagParent`.
 
 ### VerseTagMapping
 
 These rows are the real tags.
-A screen reads this table.
-A screen does not build the shown tags from the run tables.
+A verse screen reads this table.
+A tag screen also follows `VerseTagParent` and includes verses mapped to a descendant tag.
 
 Columns:
 
@@ -369,7 +394,7 @@ The program does not change the row that already has that `RunKey`.
 
 One row is one tag from one run on one verse.
 The program writes these rows only after the chapter check succeeds.
-One transaction holds the new `VerseTag` rows, the `LabelRunTag` rows, and the real-tag update for that chapter.
+One transaction holds the new `VerseTag` rows, the `VerseTagParent` rows, the `LabelRunTag` rows, and the real-tag update for that chapter.
 The program writes every selected verse of that chapter in that transaction.
 `TagIndex` follows the order of the `Tags` array from the model.
 `TagIndex` starts at 1.
@@ -387,10 +412,12 @@ The unique key column order for the tag is `LabelRunId`, then `VerseId`, then `V
 Index `VerseId` on `LabelRunTag`.
 Index `VerseTagId` on `LabelRunTag`.
 
-The program creates a `VerseTag` when that exact name is absent.
-The program reuses the `VerseTag` when that exact name is present.
-The program sets `ParentId` to null on a tag that it creates.
-The program does not change `ParentId` on a tag that already exists.
+The program creates a `VerseTag` when that name with an empty `Subclassifier` is absent.
+The program reuses that `VerseTag` when the pair is present.
+The program replaces the parent links of each tag named in this chapter.
+The program does not change the parent links of a tag this chapter does not name.
+The latest chapter that names a tag decides that tag's parents.
+The program stores an empty `Subclassifier`.
 The program does not merge names.
 EXAMPLE: Egypt and Egyptian stay as two tags.
 That pair is an example. It is not a required merge.
