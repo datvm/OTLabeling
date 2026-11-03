@@ -54,6 +54,19 @@ sealed class RunSettings
         return value.Trim();
     }
 
+    static readonly string[] EnglishBookOrder =
+    [
+        "GEN", "EXO", "LEV", "NUM", "DEU",
+        "JOS", "JDG", "RUT", "1SA", "2SA", "1KI", "2KI", "1CH", "2CH", "EZR", "NEH", "EST",
+        "JOB", "PSA", "PRO", "ECC", "SNG",
+        "ISA", "JER", "LAM", "EZK", "DAN",
+        "HOS", "JOL", "AMO", "OBA", "JON", "MIC", "NAM", "HAB", "ZEP", "HAG", "ZEC", "MAL",
+        "MAT", "MRK", "LUK", "JHN", "ACT",
+        "ROM", "1CO", "2CO", "GAL", "EPH", "PHP", "COL", "1TH", "2TH", "1TI", "2TI", "TIT", "PHM",
+        "HEB", "JAS", "1PE", "2PE", "1JN", "2JN", "3JN", "JUD",
+        "REV",
+    ];
+
     static IReadOnlyList<string> ReadBooks(string[]? books)
     {
         if (books is null)
@@ -61,6 +74,9 @@ sealed class RunSettings
 
         if (books.Length == 0)
             throw new LabelingException("Books is empty.");
+
+        if (books.Length == 1 && string.Equals(books[0]?.Trim(), "*", StringComparison.Ordinal))
+            return EnglishBookOrder;
 
         var codes = new List<string>(books.Length);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -70,6 +86,9 @@ sealed class RunSettings
                 throw new LabelingException("A book code is blank.");
 
             var code = raw.Trim();
+            if (code == "*")
+                throw new LabelingException("Books '*' must be the only value.");
+
             if (!seen.Add(code))
                 throw new LabelingException($"Book code '{code}' is repeated.");
 

@@ -161,6 +161,8 @@ The program reads the books in the array order.
 The log and the database store the code as `BibleBook.Code` stores it.
 EXAMPLE: `["GEN", "EXO"]` selects Genesis, then Exodus.
 The example shows the form. It is not a required book list.
+`["*"]` selects every book in English order.
+The order is GEN, EXO, LEV, NUM, DEU, JOS, JDG, RUT, 1SA, 2SA, 1KI, 2KI, 1CH, 2CH, EZR, NEH, EST, JOB, PSA, PRO, ECC, SNG, ISA, JER, LAM, EZK, DAN, HOS, JOL, AMO, OBA, JON, MIC, NAM, HAB, ZEP, HAG, ZEC, MAL, MAT, MRK, LUK, JHN, ACT, ROM, 1CO, 2CO, GAL, EPH, PHP, COL, 1TH, 2TH, 1TI, 2TI, TIT, PHM, HEB, JAS, 1PE, 2PE, 1JN, 2JN, 3JN, JUD, REV.
 
 These book values are errors:
 
@@ -170,6 +172,7 @@ These book values are errors:
 - A value is not a book code.
 - A book code repeats.
 - A book has no verses.
+- `*` is combined with another value.
 
 The program writes the error.
 The program exits.

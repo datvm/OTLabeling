@@ -8,7 +8,7 @@
     "VerseLabeling": {
         //"Step": "clear-runs",
         "Step": "label-is-israelites",
-        "Books": [ "LEV" ],
+        "Books": [ "*" ],
         "Chapters": "",
         "Summary": "",
         "ImmediateContext": "",
