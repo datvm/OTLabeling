@@ -63,6 +63,7 @@ A step name with no design file is an error.
 - `ImmediateContext`: ImmediateContext for the first request of the run.
 - `Rpm`: the request limit.
 - `RetryDelaySeconds`: the wait before another attempt after HTTP 429 or HTTP 503. A missing value means 30.
+- `ResumeRun`: a `LabelRun` id to continue. `0` starts a new run. A missing value means `0`.
 
 A future step adds one step name and one design file.
 `Design-Clear.MD` defines `clear-runs`.
@@ -89,7 +90,8 @@ Those empty values are an error when `label-is-israelites` starts.
   "Summary": "",
   "ImmediateContext": "",
   "Rpm": 15,
-  "RetryDelaySeconds": 30
+  "RetryDelaySeconds": 30,
+  "ResumeRun": 0
 }
 ```
 
@@ -309,6 +311,7 @@ Add a `DbSet` for each one on `LabelingContext`.
 - `VerseTagParent`
 - `VerseTagMapping`
 - `LabelRun`
+- `LabelRunChapter`
 - `LabelRunTag`
 - `VerseTagResolution`
 
@@ -397,9 +400,11 @@ Index `VerseTagId` on `VerseTagMapping`.
 
 One row is one run.
 The program inserts the row after config validation and before the first request.
+The same transaction inserts one `LabelRunChapter` row for every selected chapter.
 `Status` starts as `Running`.
 The program sets `Status` to `Completed` after the last selected chapter is stored.
 The program sets `Status` to `Failed` when an error occurs after this insert.
+The program writes `Run {id} started.` before the first request.
 
 Columns:
 
@@ -415,12 +420,56 @@ Columns:
 - `Model`: required text.
 - `Status`: required text. The values are `Running`, `Completed`, and `Failed`.
 
+The database rejects a delete of a run that still has a chapter plan.
 The database rejects a delete of a run that still has a run result.
 The database rejects a delete of a run that a resolution names.
 A second run with the same `RunKey` is an error.
 That insert fails.
 The program does not send a request for the failed insert.
 The program does not change the row that already has that `RunKey`.
+
+### LabelRunChapter
+
+One row is one chapter the run will label.
+The program inserts every selected chapter before the first request.
+A chapter is missing while `Filled` is false.
+The program sets `Filled` in the same transaction that stores that chapter's tags.
+A verse with no tags still belongs to a filled chapter.
+The program does not use an empty `LabelRunTag` set to decide that a chapter is missing.
+
+`ResumeRun` names one existing run.
+`0` does not resume.
+The program loads that run.
+The program does not read `Books`, `Chapters`, `Summary`, or `ImmediateContext` for that continuation.
+The program uses the current `Rpm`, `RetryDelaySeconds`, `BaseUrl`, and `Model`.
+The program writes `Rpm`, `BaseUrl`, and `Model` back onto the run.
+The program sends only the chapters whose `Filled` is false, in `SortOrder`.
+The first request of a resumed book uses the previous filled chapter of that same book.
+That previous row supplies `SummarySoFar` and `ImmediateContext`.
+The first chapter of a later book still uses the text `None`.
+The program writes `Run {id} resumed.` and the count of remaining chapters.
+When no chapter is missing, the program sets `Status` to `Completed`.
+The program writes that the run has no missing chapters.
+The program does not send a request.
+A run with no chapter plan is an error.
+A missing run id is an error.
+A negative `ResumeRun` is an error.
+A run whose `Step` differs from the config is an error.
+
+Columns:
+
+- `Id`: integer key.
+- `LabelRunId`: required foreign key to `LabelRun`.
+- `BookId`: required foreign key to `BibleBook`.
+- `Chapter`: required integer. The chapter number.
+- `SortOrder`: required integer. It starts at 1 and follows the selected order.
+- `Filled`: required boolean. It starts false.
+- `SummarySoFar`: required text. Empty until the chapter is filled.
+- `ImmediateContext`: required text. Empty until the chapter is filled.
+
+The unique key is `LabelRunId`, then `SortOrder`.
+The unique key is `LabelRunId`, then `BookId`, then `Chapter`.
+The database rejects a delete of a book that a chapter plan names.
 
 ### LabelRunTag
 

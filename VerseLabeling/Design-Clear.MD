@@ -10,7 +10,7 @@ The program deletes the run logs.
 The program keeps the extracted Bible and its metadata.
 The program does not call the API.
 The program does not read the API key.
-The program does not read `Books`, `Chapters`, `Summary`, `ImmediateContext`, `Rpm`, or `RetryDelaySeconds` for this step.
+The program does not read `Books`, `Chapters`, `Summary`, `ImmediateContext`, `Rpm`, `RetryDelaySeconds`, or `ResumeRun` for this step.
 The program does not insert a `LabelRun` row.
 
 The program deletes these tables when they exist, in this order:
@@ -20,6 +20,7 @@ The program deletes these tables when they exist, in this order:
 - `VerseTagMappings`
 - `VerseTagParents`
 - `VerseTags`
+- `LabelRunChapters`
 - `LabelRuns`
 
 One transaction holds those deletes.

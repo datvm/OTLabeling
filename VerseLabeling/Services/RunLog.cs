@@ -14,6 +14,8 @@ sealed class RunLog
     public RunLog(string folder)
     {
         this.folder = folder;
+        var csv = Path.Combine(folder, "verses.csv");
+        headerWritten = File.Exists(csv) && new FileInfo(csv).Length > 0;
     }
 
     public void WriteSettings(LabelRun run, int retryDelaySeconds)

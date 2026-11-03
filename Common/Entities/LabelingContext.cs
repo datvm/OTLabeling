@@ -12,6 +12,7 @@ public class LabelingContext(DbContextOptions<LabelingContext> options) : DbCont
     public DbSet<VerseTagParent> VerseTagParents { get; set; }
     public DbSet<VerseTagMapping> VerseTagMappings { get; set; }
     public DbSet<LabelRun> LabelRuns { get; set; }
+    public DbSet<LabelRunChapter> LabelRunChapters { get; set; }
     public DbSet<LabelRunTag> LabelRunTags { get; set; }
     public DbSet<VerseTagResolution> VerseTagResolutions { get; set; }
 
@@ -46,6 +47,20 @@ public class LabelingContext(DbContextOptions<LabelingContext> options) : DbCont
                 .WithMany()
                 .HasForeignKey(mapping => mapping.VerseTagId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<LabelRunChapter>(entity =>
+        {
+            entity.HasOne<LabelRun>()
+                .WithMany()
+                .HasForeignKey(chapter => chapter.LabelRunId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<BibleBook>()
+                .WithMany()
+                .HasForeignKey(chapter => chapter.BookId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Property(chapter => chapter.SummarySoFar).HasDefaultValue("");
+            entity.Property(chapter => chapter.ImmediateContext).HasDefaultValue("");
         });
 
         modelBuilder.Entity<LabelRunTag>(entity =>

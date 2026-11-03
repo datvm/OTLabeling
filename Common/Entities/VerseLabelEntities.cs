@@ -28,6 +28,20 @@ public class VerseTagMapping
     public int TagIndex { get; set; }
 }
 
+[Index(nameof(LabelRunId), nameof(SortOrder), IsUnique = true)]
+[Index(nameof(LabelRunId), nameof(BookId), nameof(Chapter), IsUnique = true)]
+public class LabelRunChapter
+{
+    public int Id { get; set; }
+    public int LabelRunId { get; set; }
+    public int BookId { get; set; }
+    public int Chapter { get; set; }
+    public int SortOrder { get; set; }
+    public bool Filled { get; set; }
+    public string SummarySoFar { get; set; } = "";
+    public string ImmediateContext { get; set; } = "";
+}
+
 [Index(nameof(RunKey), IsUnique = true)]
 public class LabelRun
 {

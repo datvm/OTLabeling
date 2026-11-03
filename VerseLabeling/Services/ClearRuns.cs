@@ -11,6 +11,7 @@ static class ClearRuns
         "VerseTagMappings",
         "VerseTagParents",
         "VerseTags",
+        "LabelRunChapters",
         "LabelRuns",
     ];
 
@@ -54,6 +55,7 @@ static class ClearRuns
         "VerseTagMappings" => database.Database.ExecuteSqlAsync($"DELETE FROM \"VerseTagMappings\";"),
         "VerseTagParents" => database.Database.ExecuteSqlAsync($"DELETE FROM \"VerseTagParents\";"),
         "VerseTags" => database.Database.ExecuteSqlAsync($"DELETE FROM \"VerseTags\";"),
+        "LabelRunChapters" => database.Database.ExecuteSqlAsync($"DELETE FROM \"LabelRunChapters\";"),
         "LabelRuns" => database.Database.ExecuteSqlAsync($"DELETE FROM \"LabelRuns\";"),
         _ => throw new LabelingException($"Table '{table}' is not a labeling table."),
     };

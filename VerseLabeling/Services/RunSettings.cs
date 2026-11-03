@@ -14,6 +14,7 @@ sealed class RunSettings
     public required int RetryDelaySeconds { get; init; }
     public required string BaseUrl { get; init; }
     public required string Model { get; init; }
+    public required int ResumeRunId { get; init; }
 
     public static RunSettings Read(AppConfig config)
     {
@@ -28,11 +29,27 @@ sealed class RunSettings
         if (step != StepName)
             throw new LabelingException($"Step '{step}' has no design file.");
 
+        var resumeRunId = ReadResume(labeling.ResumeRun);
+        IReadOnlyList<string> bookCodes;
+        string chaptersText;
+        ChapterRange? range;
+        if (resumeRunId == 0)
+        {
+            bookCodes = ReadBooks(labeling.Books);
+            chaptersText = ReadChapters(labeling.Chapters, out range);
+        }
+        else
+        {
+            bookCodes = [];
+            chaptersText = "";
+            range = null;
+        }
+
         return new RunSettings
         {
             Step = step,
-            BookCodes = ReadBooks(labeling.Books),
-            ChaptersText = ReadChapters(labeling.Chapters, out var range),
+            BookCodes = bookCodes,
+            ChaptersText = chaptersText,
             Range = range,
             Summary = NormalizeContext(labeling.Summary),
             ImmediateContext = NormalizeContext(labeling.ImmediateContext),
@@ -40,7 +57,19 @@ sealed class RunSettings
             RetryDelaySeconds = ReadRetryDelay(labeling.RetryDelaySeconds),
             BaseUrl = baseUrl,
             Model = model,
+            ResumeRunId = resumeRunId,
         };
+    }
+
+    static int ReadResume(int? resumeRun)
+    {
+        if (resumeRun is null or 0)
+            return 0;
+
+        if (resumeRun < 0)
+            throw new LabelingException("ResumeRun must be zero or a run id.");
+
+        return resumeRun.Value;
     }
 
     static string Require(string? value, string name)

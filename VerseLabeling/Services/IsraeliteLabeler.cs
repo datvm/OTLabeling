@@ -8,8 +8,28 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         SelectedChapter? current = null;
         try
         {
-            var chapters = await SelectChaptersAsync(settings);
-            run = await InsertRunAsync(settings, chapters);
+            List<SelectedChapter> chapters;
+            if (settings.ResumeRunId == 0)
+            {
+                chapters = (await SelectChaptersAsync(settings)).ToList();
+                run = await InsertRunAsync(settings, chapters);
+                Console.WriteLine($"Run {run.Id} started.");
+            }
+            else
+            {
+                run = await OpenRunAsync(settings);
+                chapters = await MissingChaptersAsync(run);
+                if (chapters.Count == 0)
+                {
+                    run.Status = LabelRun.StatusCompleted;
+                    await database.SaveChangesAsync();
+                    Console.WriteLine($"Run {run.Id} has no missing chapters.");
+                    return;
+                }
+
+                Console.WriteLine($"Run {run.Id} resumed. {chapters.Count} chapters remain.");
+            }
+
             var log = new RunLog(Path.Combine(
                 config.AppConfigPath,
                 "out",
@@ -35,12 +55,23 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             string? bookCode = null;
             string? carriedSummary = null;
             string? carriedImmediate = null;
+            var first = chapters[0];
+            if (!first.FirstInRun)
+            {
+                var prior = await PreviousChapterAsync(run.Id, first);
+                if (prior is not null)
+                {
+                    bookCode = first.Book.Code;
+                    carriedSummary = prior.SummarySoFar;
+                    carriedImmediate = prior.ImmediateContext;
+                }
+            }
 
             foreach (var chapter in chapters)
             {
                 current = chapter;
                 Console.WriteLine($"{chapter.Book.Code} {chapter.Chapter} started.");
-                var (summary, immediate) = ContextFor(chapter, ref bookCode, ref carriedSummary, ref carriedImmediate, settings);
+                var (summary, immediate) = ContextFor(chapter, ref bookCode, ref carriedSummary, ref carriedImmediate, run);
                 var request = ChapterPrompt.Build(summary, immediate, chapter.Verses);
                 var messages = new List<ChatMessage> { new(ChatRole.User, request) };
                 await WaitForTurnAsync();
@@ -334,10 +365,80 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 .ToDictionary(group => group.Key, group => (IReadOnlyList<BibleVerse>)group.ToList());
 
             foreach (var number in numbers)
-                selected.Add(new SelectedChapter(book, number, byChapter[number]));
+            {
+                selected.Add(new SelectedChapter(book, number, byChapter[number], selected.Count + 1, selected.Count == 0));
+            }
         }
 
         return selected;
+    }
+
+    async Task<LabelRun> OpenRunAsync(RunSettings settings)
+    {
+        var run = await database.LabelRuns.FirstOrDefaultAsync(item => item.Id == settings.ResumeRunId);
+        if (run is null)
+            throw new LabelingException($"Run {settings.ResumeRunId} does not exist.");
+
+        if (!run.Step.Equals(settings.Step, StringComparison.Ordinal))
+            throw new LabelingException($"Run {run.Id} is step '{run.Step}'.");
+
+        database.LabelRuns.Attach(run);
+        run.Status = LabelRun.StatusRunning;
+        run.Rpm = settings.Rpm;
+        run.BaseUrl = settings.BaseUrl;
+        run.Model = settings.Model;
+        await database.SaveChangesAsync();
+        return run;
+    }
+
+    async Task<List<SelectedChapter>> MissingChaptersAsync(LabelRun run)
+    {
+        var plans = await database.LabelRunChapters
+            .Where(row => row.LabelRunId == run.Id)
+            .OrderBy(row => row.SortOrder)
+            .ToListAsync();
+        if (plans.Count == 0)
+            throw new LabelingException($"Run {run.Id} has no chapter plan.");
+
+        var pending = plans.Where(row => !row.Filled).ToList();
+        if (pending.Count == 0)
+            return [];
+
+        var books = await database.BibleBooks.ToDictionaryAsync(book => book.Id);
+        var firstOrder = plans[0].SortOrder;
+        var selected = new List<SelectedChapter>();
+        foreach (var plan in pending)
+        {
+            if (!books.TryGetValue(plan.BookId, out var book))
+                throw new LabelingException($"Run {run.Id} names a missing book.");
+
+            var verses = await database.BibleVerses
+                .Where(verse => verse.BookId == plan.BookId && verse.Chapter == plan.Chapter)
+                .OrderBy(verse => verse.VerseNumber)
+                .ToListAsync();
+            if (verses.Count == 0)
+                throw new LabelingException($"Chapter {plan.Chapter} is not in {book.Code}.");
+
+            selected.Add(new SelectedChapter(
+                book,
+                plan.Chapter,
+                verses,
+                plan.SortOrder,
+                plan.SortOrder == firstOrder));
+        }
+
+        return selected;
+    }
+
+    async Task<LabelRunChapter?> PreviousChapterAsync(int runId, SelectedChapter chapter)
+    {
+        return await database.LabelRunChapters
+            .Where(row => row.LabelRunId == runId
+                && row.BookId == chapter.Book.Id
+                && row.SortOrder < chapter.SortOrder
+                && row.Filled)
+            .OrderByDescending(row => row.SortOrder)
+            .FirstOrDefaultAsync();
     }
 
     static List<int> ChapterNumbers(string bookCode, List<int> stored, ChapterRange? range)
@@ -379,10 +480,26 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             Status = LabelRun.StatusRunning,
         };
 
-        database.LabelRuns.Add(run);
+        await using var transaction = await database.Database.BeginTransactionAsync();
         try
         {
+            database.LabelRuns.Add(run);
             await database.SaveChangesAsync();
+            var order = 1;
+            foreach (var chapter in chapters)
+            {
+                database.LabelRunChapters.Add(new LabelRunChapter
+                {
+                    LabelRunId = run.Id,
+                    BookId = chapter.Book.Id,
+                    Chapter = chapter.Chapter,
+                    SortOrder = order,
+                });
+                order++;
+            }
+
+            await database.SaveChangesAsync();
+            await transaction.CommitAsync();
         }
         catch (DbUpdateException ex)
         {
@@ -395,6 +512,7 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             throw new LabelingException("The database write failed: " + detail);
         }
 
+        DetachExceptRun();
         return run;
     }
 
@@ -637,6 +755,14 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 }
             }
 
+            var plan = await database.LabelRunChapters
+                .Where(row => row.LabelRunId == run.Id && row.BookId == chapter.Book.Id && row.Chapter == chapter.Chapter)
+                .FirstAsync();
+            database.LabelRunChapters.Attach(plan);
+            plan.Filled = true;
+            plan.SummarySoFar = output.SummarySoFar!;
+            plan.ImmediateContext = output.ImmediateContext!;
+
             await database.SaveChangesAsync();
             await transaction.CommitAsync();
             DetachExceptRun();
@@ -653,17 +779,17 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         ref string? bookCode,
         ref string? carriedSummary,
         ref string? carriedImmediate,
-        RunSettings settings)
+        LabelRun run)
     {
         if (chapter.Book.Code == bookCode)
             return (carriedSummary!, carriedImmediate!);
 
         var laterBook = bookCode is not null;
         bookCode = chapter.Book.Code;
-        if (laterBook)
+        if (laterBook || !chapter.FirstInRun)
             return ("None", "None");
 
-        return (settings.Summary, settings.ImmediateContext);
+        return (run.Summary, run.ImmediateContext);
     }
 
     async Task MarkFailedAsync(LabelRun? run)
@@ -717,4 +843,9 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
     }
 }
 
-sealed record SelectedChapter(BibleBook Book, int Chapter, IReadOnlyList<BibleVerse> Verses);
+sealed record SelectedChapter(
+    BibleBook Book,
+    int Chapter,
+    IReadOnlyList<BibleVerse> Verses,
+    int SortOrder,
+    bool FirstInRun);

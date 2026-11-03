@@ -190,9 +190,12 @@ A failed check does not write that chapter to `verses.csv`.
 A failed check does not write that chapter to `chapters.jsonl`.
 A failed check does not write that chapter to `LabelRunTag`, `VerseTagParent`, or `VerseTagMapping`.
 A failed check does not create a `VerseTag` from that chapter.
+A failed check leaves that chapter's `LabelRunChapter.Filled` false.
 
 ## Chapter order
 
+`Design.MD` defines `ResumeRun` and `LabelRunChapter`.
+A new run inserts one `LabelRunChapter` for every selected chapter before the first request.
 The program reads the books in the `Books` array order.
 The program completes one book before the next book.
 Inside a book, the program sends the selected chapters in ascending order.

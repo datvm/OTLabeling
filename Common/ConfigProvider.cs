@@ -78,5 +78,6 @@ public record VerseLabelingConfig(
     string? Summary,
     string? ImmediateContext,
     int? Rpm,
-    int? RetryDelaySeconds
+    int? RetryDelaySeconds,
+    int? ResumeRun
 );

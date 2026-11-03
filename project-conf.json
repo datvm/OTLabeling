@@ -13,6 +13,7 @@
         "Summary": "",
         "ImmediateContext": "",
         "Rpm": 15,
-        "RetryDelaySeconds": 30
+        "RetryDelaySeconds": 30,
+        "ResumeRun": 0
     }
 }
