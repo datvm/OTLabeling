@@ -2,17 +2,20 @@
     "DbPath": "db/out/labeling.sqlite", // Output by code is in an ignored folder, manually copy it out in order to commit them.
     "Translation": "BSB",
     "Ai": {
-        "BaseUrl": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "Model": "gemini-3.5-flash-lite"
+        "BaseUrl": "https://openrouter.ai/api/v1",
+        "Model": "~deepseek/deepseek-flash-latest",
+        "ReasoningEffort": "minimal"
+        // "InputTokenCost": 0.0, // Dollars per 1,000,000 tokens. Used when the response has no cost.
+        // "OutputTokenCost": 0.0
     },
     "VerseLabeling": {
         //"Step": "clear-runs",
         "Step": "label-is-israelites",
-        "Books": [ "*" ],
+        "Books": [ "GEN" ],
         "Chapters": "",
         "Summary": "",
         "ImmediateContext": "",
-        "Rpm": 15,
+        "Rpm": 20,
         "RetryDelaySeconds": 30,
         "ResumeRun": 0
     }

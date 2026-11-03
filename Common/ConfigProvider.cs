@@ -68,7 +68,10 @@ public record AppConfig(
 
 public record AiConfig(
     string? BaseUrl,
-    string? Model
+    string? Model,
+    float? InputTokenCost,
+    float? OutputTokenCost,
+    string? ReasoningEffort
 );
 
 public record VerseLabelingConfig(

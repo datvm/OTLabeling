@@ -15,6 +15,9 @@ sealed class RunSettings
     public required string BaseUrl { get; init; }
     public required string Model { get; init; }
     public required int ResumeRunId { get; init; }
+    public required decimal? InputTokenCost { get; init; }
+    public required decimal? OutputTokenCost { get; init; }
+    public required string? ReasoningEffort { get; init; }
 
     public static RunSettings Read(AppConfig config)
     {
@@ -25,6 +28,8 @@ sealed class RunSettings
             throw new LabelingException("BaseUrl is invalid.");
 
         var model = Require(ai.Model, "Model");
+        var (inputTokenCost, outputTokenCost) = ReadTokenCost(ai.InputTokenCost, ai.OutputTokenCost);
+        var reasoningEffort = ReadReasoning(ai.ReasoningEffort);
         var step = Require(labeling.Step, "Step");
         if (step != StepName)
             throw new LabelingException($"Step '{step}' has no design file.");
@@ -58,7 +63,41 @@ sealed class RunSettings
             BaseUrl = baseUrl,
             Model = model,
             ResumeRunId = resumeRunId,
+            InputTokenCost = inputTokenCost,
+            OutputTokenCost = outputTokenCost,
+            ReasoningEffort = reasoningEffort,
         };
+    }
+
+    public static string? ReadReasoning(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var effort = value.Trim();
+        if (effort is "none" or "minimal" or "low" or "medium" or "high" or "xhigh" or "max")
+            return effort;
+
+        throw new LabelingException("ReasoningEffort must be none, minimal, low, medium, high, xhigh, or max.");
+    }
+
+    static (decimal? Input, decimal? Output) ReadTokenCost(float? input, float? output)
+    {
+        if (input is null && output is null)
+            return (null, null);
+
+        if (input is null || output is null)
+            throw new LabelingException("Set both InputTokenCost and OutputTokenCost, or neither.");
+
+        return (ReadRate(input.Value, "InputTokenCost"), ReadRate(output.Value, "OutputTokenCost"));
+    }
+
+    static decimal ReadRate(float value, string name)
+    {
+        if (float.IsNaN(value) || float.IsInfinity(value) || value < 0)
+            throw new LabelingException($"{name} must be zero or greater.");
+
+        return (decimal)value;
     }
 
     static int ReadResume(int? resumeRun)

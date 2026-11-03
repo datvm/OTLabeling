@@ -204,6 +204,7 @@ When the check succeeds, the program writes that chapter to the database.
 The program appends that chapter to the log after the database transaction commits.
 The program sends the next request after that append.
 The program writes `{book code} {chapter} started.` before that request.
+`Design.MD` defines the token and cost line written after each successful response.
 The program writes `{book code} {chapter} done.` after that chapter commits.
 The program writes `{book code} {chapter} failed.` when that chapter fails.
 A failed run keeps every chapter that already committed.

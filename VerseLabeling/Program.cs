@@ -12,9 +12,10 @@ static async Task RunAsync()
     try
     {
         string? apiKey = null;
+        var usageCapture = new UsageCapture();
         await using var provider = (ServiceProvider)await CommonUtils.CreateServiceProviderAsync(services =>
             services.AddSingleton<IChatClient>(sp =>
-                ChatClientFactory.Create(sp.GetRequiredService<ConfigProvider>(), apiKey!)));
+                ChatClientFactory.Create(sp.GetRequiredService<ConfigProvider>(), apiKey!, usageCapture)));
 
         var config = provider.GetRequiredService<ConfigProvider>();
         var step = config.AppConfig.VerseLabeling?.Step?.Trim();
@@ -32,7 +33,7 @@ static async Task RunAsync()
         await using var scope = provider.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<LabelingContext>();
         var chat = scope.ServiceProvider.GetRequiredService<IChatClient>();
-        var labeler = new IsraeliteLabeler(database, config, chat, apiKey);
+        var labeler = new IsraeliteLabeler(database, config, chat, apiKey, usageCapture);
         await labeler.RunAsync(settings);
     }
     catch (LabelingException ex)

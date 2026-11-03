@@ -44,7 +44,7 @@ A process argument is an error.
 The program does not read `appsettings.json`.
 A JSON null follows the same rule as a missing value.
 
-`Ai` holds `BaseUrl` and `Model`.
+`Ai` holds `BaseUrl`, `Model`, `InputTokenCost`, `OutputTokenCost`, and `ReasoningEffort`.
 `VerseLabeling` holds the run settings.
 The API key is not in this file.
 A missing `Ai` object is an error for `label-is-israelites`.
@@ -77,11 +77,15 @@ The book list, the range, and the two texts are examples.
 `RetryDelaySeconds` 30 in the example is the default.
 Empty `BaseUrl` and `Model` show the shape before the real values exist.
 Those empty values are an error when `label-is-israelites` starts.
+The two token costs in the example are examples.
 
 ```json
 "Ai": {
   "BaseUrl": "",
-  "Model": ""
+  "Model": "",
+  "InputTokenCost": 0.15,
+  "OutputTokenCost": 0.60,
+  "ReasoningEffort": "none"
 },
 "VerseLabeling": {
   "Step": "label-is-israelites",
@@ -282,13 +286,50 @@ The program exits.
 The program does not write the API key to the log or the database.
 
 Add an `Ai` object in `project-conf.json`.
-`Ai` has `BaseUrl` and `Model`.
-Keep both values empty in the repository until the real values exist.
+`Ai` has `BaseUrl`, `Model`, `InputTokenCost`, `OutputTokenCost`, and `ReasoningEffort`.
+`InputTokenCost` and `OutputTokenCost` are dollars per 1,000,000 tokens.
+`ReasoningEffort` sets the thinking effort on each chat request.
+The values are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`.
+`none` disables reasoning.
+A missing or blank `ReasoningEffort` does not send the field.
+The model then uses its own default.
+Any other value is an error.
+A missing value means the field is absent.
+Set both costs, or set neither.
+A negative cost is an error.
+Keep `BaseUrl` and `Model` empty in the repository until the real values exist.
 The real URL and the real model name are values to supply.
 The program still treats those empty values as errors.
 
 Proposed Gemini base URL: `https://generativelanguage.googleapis.com/v1beta/openai/`
 Proposed DeepSeek base URL: `https://api.deepseek.com`
+
+OpenRouter returns `usage.prompt_tokens`, `usage.completion_tokens`, and `usage.cost` on a chat response.
+`usage.cost` is the dollars charged for that response.
+The program reads those three fields from the response body.
+The program writes this line after each successful response:
+
+`Tokens in 1200 out 340. Cost $0.001. Total in 2400 out 680. Cost $0.002.`
+
+When the response includes `usage.completion_tokens_details.reasoning_tokens`, the line names that count:
+
+`Tokens in 3985 out 13726. Reasoning 12800. Cost $0.014. Total in 32352 out 153601. Reasoning 140000. Cost $0.144.`
+
+`out` includes the reasoning tokens.
+`Reasoning` is the thinking part of `out`.
+
+The first pair is that response.
+The total pair is every successful response in this process.
+A resumed run starts that total at zero.
+The cost uses three decimal places.
+When the response includes `usage.cost`, the program uses that amount.
+When the response omits `usage.cost`, the program uses `InputTokenCost` and `OutputTokenCost`.
+The formula is input tokens times `InputTokenCost`, plus output tokens times `OutputTokenCost`, divided by 1,000,000.
+When the response omits `usage.cost` and both config costs are absent, that line says the cost is not available.
+One response without a cost makes the total cost unavailable for the rest of the process.
+A check retry is a response.
+An HTTP 429 retry writes the line only after a response arrives.
+The program writes `Tokens are not available.` when the response has no token counts.
 
 The step asks the client for one JSON object.
 The program sets the chat response format to a JSON schema for that object.

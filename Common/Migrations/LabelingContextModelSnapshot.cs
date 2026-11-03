@@ -217,6 +217,52 @@ namespace Common.Migrations
                     b.ToTable("LabelRuns");
                 });
 
+            modelBuilder.Entity("Common.Entities.LabelRunChapter", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BookId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Chapter")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Filled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ImmediateContext")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("");
+
+                    b.Property<int>("LabelRunId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SummarySoFar")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookId");
+
+                    b.HasIndex("LabelRunId", "SortOrder")
+                        .IsUnique();
+
+                    b.HasIndex("LabelRunId", "BookId", "Chapter")
+                        .IsUnique();
+
+                    b.ToTable("LabelRunChapters");
+                });
+
             modelBuilder.Entity("Common.Entities.LabelRunTag", b =>
                 {
                     b.Property<int>("Id")
@@ -408,6 +454,21 @@ namespace Common.Migrations
                     b.Navigation("Book");
 
                     b.Navigation("BookOrder");
+                });
+
+            modelBuilder.Entity("Common.Entities.LabelRunChapter", b =>
+                {
+                    b.HasOne("Common.Entities.BibleBook", null)
+                        .WithMany()
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Common.Entities.LabelRun", null)
+                        .WithMany()
+                        .HasForeignKey("LabelRunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Common.Entities.LabelRunTag", b =>

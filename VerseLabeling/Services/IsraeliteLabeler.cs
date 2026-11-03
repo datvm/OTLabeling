@@ -1,6 +1,11 @@
 ﻿namespace VerseLabeling.Services;
 
-sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, IChatClient chat, string apiKey)
+sealed class IsraeliteLabeler(
+    LabelingContext database,
+    ConfigProvider config,
+    IChatClient chat,
+    string apiKey,
+    UsageCapture usageCapture)
 {
     public async Task RunAsync(RunSettings settings)
     {
@@ -38,6 +43,8 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 run.RunKey));
             log.WriteSettings(run, settings.RetryDelaySeconds);
 
+            inputTokenCost = settings.InputTokenCost;
+            outputTokenCost = settings.OutputTokenCost;
             var gap = TimeSpan.FromSeconds(60d / settings.Rpm);
             long? requestStart = null;
 
@@ -154,6 +161,13 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
     static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMilliseconds(int.MaxValue);
 
     int retryStreak;
+    decimal? inputTokenCost;
+    decimal? outputTokenCost;
+    long totalInputTokens;
+    long totalOutputTokens;
+    long totalReasoningTokens;
+    decimal totalCost;
+    bool costComplete = true;
 
     static bool CanRetryCheck(IReadOnlyList<string> errors) =>
         errors.Count > 0 && errors.All(IsRetryableCheck);
@@ -214,8 +228,10 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         {
             try
             {
+                usageCapture.Latest = null;
                 var response = await chat.GetResponseAsync<ChapterOutput>(messages, ResponseSchema);
                 retryStreak = 0;
+                ReportUsage(response.Usage);
                 if (string.IsNullOrEmpty(response.Text))
                     throw new LabelingException("The API call returned no body.");
 
@@ -245,6 +261,60 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             }
         }
     }
+
+    void ReportUsage(UsageDetails? details)
+    {
+        var captured = usageCapture.Latest;
+        var input = captured?.InputTokens ?? details?.InputTokenCount;
+        var output = captured?.OutputTokens ?? details?.OutputTokenCount;
+        if (input is null || output is null)
+        {
+            Console.WriteLine("Tokens are not available.");
+            return;
+        }
+
+        totalInputTokens += input.Value;
+        totalOutputTokens += output.Value;
+        var cost = captured?.Cost ?? RateCost(input.Value, output.Value);
+        string requestCost;
+        if (cost is decimal amount)
+        {
+            requestCost = Money(amount);
+            if (costComplete)
+                totalCost += amount;
+        }
+        else
+        {
+            requestCost = "is not available";
+            costComplete = false;
+        }
+
+        var totalCostText = costComplete ? Money(totalCost) : "is not available";
+        var reasoning = captured?.ReasoningTokens;
+        var reasoningText = "";
+        var totalReasoningText = "";
+        if (reasoning is long count)
+        {
+            totalReasoningTokens += count;
+            reasoningText = $" Reasoning {count}.";
+            totalReasoningText = $" Reasoning {totalReasoningTokens}.";
+        }
+
+        Console.WriteLine(
+            $"Tokens in {input.Value} out {output.Value}.{reasoningText} Cost {requestCost}. Total in {totalInputTokens} out {totalOutputTokens}.{totalReasoningText} Cost {totalCostText}.");
+    }
+
+    decimal? RateCost(long input, long output)
+    {
+        if (inputTokenCost is null || outputTokenCost is null)
+            return null;
+
+        return input * inputTokenCost.Value / 1_000_000m
+            + output * outputTokenCost.Value / 1_000_000m;
+    }
+
+    static string Money(decimal value) =>
+        "$" + value.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture);
 
     static TimeSpan RetryDelay(int baseSeconds, int streak)
     {
@@ -576,23 +646,29 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             if (!string.Equals(row.Name, tag.Name, StringComparison.OrdinalIgnoreCase))
                 continue;
 
+            if (modelSub.Length > 0)
+            {
+                if (!string.Equals(row.Subclassifier, modelSub, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (string.Equals(row.Name, tag.Name, StringComparison.Ordinal) &&
+                    string.Equals(row.Subclassifier, modelSub, StringComparison.Ordinal))
+                    return row;
+
+                same ??= row;
+                continue;
+            }
+
             if (row.Id == 0)
             {
-                if (modelSub.Length == 0 && parentNames.Count == 0 && row.Subclassifier.Length == 0)
+                if (parentNames.Count == 0 && row.Subclassifier.Length == 0)
                     return row;
 
                 continue;
             }
 
-            if (modelSub.Length > 0)
-            {
-                if (!string.Equals(row.Subclassifier, modelSub, StringComparison.OrdinalIgnoreCase))
-                    continue;
-            }
-            else if (!IsPathKey(row.Subclassifier))
-            {
+            if (!IsPathKey(row.Subclassifier))
                 continue;
-            }
 
             var chain = ParentChain(known, row.Id);
             if (chain is null || !chain.SequenceEqual(parentNames, StringComparer.OrdinalIgnoreCase))
