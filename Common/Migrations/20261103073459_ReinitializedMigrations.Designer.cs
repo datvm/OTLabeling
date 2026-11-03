@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Common.Migrations
 {
     [DbContext(typeof(LabelingContext))]
-    [Migration("20261102152347_ReinitializedMigrations")]
+    [Migration("20261103073459_ReinitializedMigrations")]
     partial class ReinitializedMigrations
     {
         /// <inheritdoc />
@@ -262,14 +262,14 @@ namespace Common.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT")
-                        .UseCollation("BINARY");
+                        .UseCollation("NOCASE");
 
                     b.Property<string>("Subclassifier")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
                         .HasDefaultValue("")
-                        .UseCollation("BINARY");
+                        .UseCollation("NOCASE");
 
                     b.HasKey("Id");
 

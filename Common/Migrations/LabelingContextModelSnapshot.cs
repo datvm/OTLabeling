@@ -259,14 +259,14 @@ namespace Common.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT")
-                        .UseCollation("BINARY");
+                        .UseCollation("NOCASE");
 
                     b.Property<string>("Subclassifier")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
                         .HasDefaultValue("")
-                        .UseCollation("BINARY");
+                        .UseCollation("NOCASE");
 
                     b.HasKey("Id");
 

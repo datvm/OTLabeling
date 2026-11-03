@@ -108,7 +108,8 @@ Before each retry, the program writes the status, the retry number, and the wait
 A response that is not 429 or 503 sets that count and that wait back to the start.
 Any other API failure fails immediately.
 A verse tag path check is retried.
-A chapter gate, a missing verse, or an empty summary still stops the run.
+A missing verse or an empty summary still stops the run.
+Using Pre-Israelite, Israelite, or Non-Israelite in the wrong chapters is retried.
 The program sends the original input, that response, and the check error.
 It asks for a full JSON response.
 The message list keeps every question and every response in that chapter.
@@ -325,12 +326,13 @@ Columns:
 - `Subclassifier`: required text. An empty string means the name is one tag, or the same name under different roots.
 
 The unique key is `Name`, then `Subclassifier`.
-The unique comparison is ordinal and case-sensitive.
+The unique comparison ignores capital letters.
 The model writes a path on each verse tag.
 The program stores the last step as `Name`.
 The program stores a parent from the previous step.
-When one name is two tags under the same root, the model writes a short classifier on the last step.
-That classifier is at most 40 characters.
+A Subclassifier is minimal, and only when absolutely necessary.
+It is necessary only when two people or places in the chapter would otherwise have the same path.
+The phrase is the shortest words that tell the two apart, at most 40 characters.
 A fixed step has no classifier.
 The fixed steps are People, God, Places, Antediluvian, Pre-Israelite, Israelite, Non-Israelite, Others, Israel, and Non-Israel.
 The model spells a fixed step exactly.

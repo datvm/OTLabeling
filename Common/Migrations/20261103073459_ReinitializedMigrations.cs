@@ -79,8 +79,8 @@ namespace Common.Migrations
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", nullable: false, collation: "BINARY"),
-                    Subclassifier = table.Column<string>(type: "TEXT", nullable: false, defaultValue: "", collation: "BINARY")
+                    Name = table.Column<string>(type: "TEXT", nullable: false, collation: "NOCASE"),
+                    Subclassifier = table.Column<string>(type: "TEXT", nullable: false, defaultValue: "", collation: "NOCASE")
                 },
                 constraints: table =>
                 {

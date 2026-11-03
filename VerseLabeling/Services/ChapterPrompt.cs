@@ -7,6 +7,9 @@ static class ChapterPrompt
         Do not add people, events, or places that those texts do not mention.
         You may use the definition of the Promised Land in these rules to decide whether a named place is inside that land.
         Spell People, God, Places, Israelite, Non-Israelite, Pre-Israelite, Antediluvian, Others, Israel, and Non-Israel exactly as written in this request.
+        Different capital letters do not make a new tag.
+        LORD and Lord are the same tag.
+        Lord God and Lord GOD are the same tag.
         Do not use Everyone.
         Do not use Unknown. Use Others.
 
@@ -21,6 +24,16 @@ static class ChapterPrompt
         Example: Places.Non-Israel.Egypt.Goshen.
         Example: God.LORD.
         Example: God.
+        A root is a whole path only when that root has no fixed children.
+        God has no fixed children. God himself is the path God, not God.God.
+        People and Places have fixed children, so People alone and Places alone are not paths.
+        Use a leaf fixed tag when the text names nothing more specific.
+        The leaf fixed tags are People.Antediluvian, People.Pre-Israelite, People.Israelite, People.Non-Israelite, People.Others, Places.Israel, Places.Non-Israel, and Places.Others.
+        When no people category can be determined, use People.Others.
+        When no place category can be determined, use Places.Others.
+        Do not repeat a step.
+        The land is Places.Israel, not Israel.Israel and not Places.Israel.Israel.
+        The person Israel is People.Israelite.Israel. Stop there when the text names no further person.
         The children of People are Antediluvian, Pre-Israelite, Israelite, Non-Israelite, and Others.
         A person or a people is not a direct step under People.
         People.Others has no further step.
@@ -36,11 +49,24 @@ static class ChapterPrompt
         Canaan the land is Places.Non-Israel.Canaan.
         A verse about the son lists the person path.
         A verse about the land lists the place path.
-        When two different people or places would have the same path, add a short classifier to the last name only.
-        Write that last step as Name (phrase).
-        The phrase comes from the supplied text and has at most 40 characters.
-        Example: People.Pre-Israelite.Lamech (father of Noah).
-        A fixed step does not take a classifier.
+        A Subclassifier is the phrase in parentheses on the last step.
+        Leave the Subclassifier off.
+        A Subclassifier is minimal, and only when absolutely necessary.
+        It is necessary only when this chapter has two different people or places that would otherwise have the same path.
+        A title, a description, or a poetic phrase is not a reason to add one.
+        A wife, son, family, or other companion is not a Subclassifier.
+        That person or group gets its own tag name.
+        Noah's wife is People.Antediluvian.Noah's wife, not Noah (wife).
+        Noah's sons are People.Antediluvian.Noah's sons, not Noah (sons).
+        Daughter of Zion is People.Israelite.Zion.
+        The Holy One of Israel is not a Subclassifier on Israel.
+        God himself is the path God.
+        Do not write God.God.
+        Do not repeat Israel. The land is Places.Israel. The person is People.Israelite.Israel.
+        When a Subclassifier is necessary, write the last step as Name (phrase).
+        The phrase is the shortest words that tell the two apart, at most 40 characters.
+        Example: People.Pre-Israelite.Lamech (father of Noah) and People.Pre-Israelite.Lamech (son of Noah).
+        A fixed step does not take a Subclassifier.
         The fixed steps are People, God, Places, Antediluvian, Pre-Israelite, Israelite, Non-Israelite, Others, Israel, and Non-Israel.
         Use the same path when a later chapter mentions that same person or place.
 
@@ -65,7 +91,7 @@ static class ChapterPrompt
         Do not use Non-Israelite before Genesis 12.
         When the text names a specific people, the path continues under Non-Israelite.
         Example: People.Non-Israelite.Moabite.
-        The verse then lists that path, not People.Non-Israelite alone.
+        When the text does not name a people, stop at People.Non-Israelite.
         Non-Israelite is the people tag. Non-Israel is the place tag. They are different tags.
 
         Pre-Israelite is a person or group in the text before Genesis 12.

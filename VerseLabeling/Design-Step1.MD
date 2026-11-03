@@ -114,6 +114,11 @@ EXAMPLE: `People.Non-Israelite.Moabite`.
 EXAMPLE: `People.Others`.
 EXAMPLE: `Places.Non-Israel.Egypt.Goshen`.
 The response does not include a tag catalog.
+A root is a whole path only when that root has no fixed children.
+God has no fixed children, so `God` is a valid path.
+People and Places have fixed children, so those roots alone fail the check.
+A leaf fixed tag is a valid path when the text names nothing more specific.
+A repeated step fails the check. `God.God` is `God`. `Places.Israel.Israel` and `Israel.Israel` are `Places.Israel`.
 The program ignores any other JSON property.
 
 The root tags are People and Places.
@@ -125,7 +130,10 @@ Places is the only parent of each place tag.
 The people tag Others and the place tag Others are different tags.
 Do not use Everyone.
 Do not use Unknown. Use Others.
-The check fails when a tag differs from one of these names only by letter case.
+The check fails when a fixed tag differs from one of these names only by letter case.
+Any other tag is the same tag when the only difference is capital letters.
+LORD and Lord are one tag.
+Lord God and Lord GOD are one tag.
 Any other spelling stays as the model wrote it.
 That spelling may be a group name, a person name, or a place name.
 EXAMPLE: Israelites stays as a group name.
@@ -134,7 +142,15 @@ EXAMPLE: Goshen stays as a place name.
 Those words are examples. They are not required tags.
 The program stores that name as the model wrote it.
 The program keeps one copy of a repeated path in a verse `Tags` array.
+Two paths that differ only by capital letters are one tag on that verse.
 The first copy keeps its place.
+A Subclassifier is minimal, and only when absolutely necessary.
+It is necessary only when two people or places in the chapter would otherwise have the same path.
+The phrase is the shortest words that tell the two apart.
+A title, a description, or a poetic phrase is not a reason to add one.
+A wife, son, family, or other companion is a separate tag.
+Noah's wife is `People.Antediluvian.Noah's wife`, not `Noah (wife)`.
+An extra Subclassifier does not fail the check.
 Two paths that end with the same name and share a root need a short classifier on the last step.
 That classifier is at most 40 characters.
 A fixed step does not take a classifier.
@@ -245,7 +261,8 @@ JSONL keeps commas and line breaks inside the two texts.
 
 The program writes `raw/{bookCode}-{chapter}.txt` for every response body.
 The program asks again, up to 3 times, when a verse tag path fails the check.
-A chapter gate, a missing verse, or an empty summary still stops the run.
+A missing verse or an empty summary still stops the run.
+Using Pre-Israelite, Israelite, or Non-Israelite in the wrong chapters is retried.
 That request includes the original input, the response, and the check error.
 The message list keeps the earlier questions and responses.
 The program also writes `raw/{bookCode}-{chapter}-{attempt}.txt` for each of those bodies.

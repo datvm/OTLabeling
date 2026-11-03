@@ -3,12 +3,12 @@
     "Translation": "BSB",
     "Ai": {
         "BaseUrl": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "Model": "gemini-3.1-flash-lite"
+        "Model": "gemini-3.5-flash-lite"
     },
     "VerseLabeling": {
         //"Step": "clear-runs",
         "Step": "label-is-israelites",
-        "Books": [ "ISA" ],
+        "Books": [ "LEV" ],
         "Chapters": "",
         "Summary": "",
         "ImmediateContext": "",

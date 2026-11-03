@@ -15,7 +15,7 @@ sealed class TagPathSet
         if (verses is null)
             return set;
 
-        var parsed = new List<(string Text, Segment[] Segments)>();
+        var parsed = new List<(int Verse, string Text, Segment[] Segments)>();
         var failed = false;
         foreach (var item in verses)
         {
@@ -45,11 +45,12 @@ sealed class TagPathSet
                 foreach (var segment in segments)
                     set.Names.Add(segment.Name);
 
-                parsed.Add((tag, segments));
+                parsed.Add((item.VerseNumber, tag, segments));
             }
         }
 
-        if (!failed)
+        set.RejectUnused(parsed);
+        if (!failed && set.Errors.Count == 0)
             set.Build(parsed);
 
         return set;
@@ -61,10 +62,17 @@ sealed class TagPathSet
         var parts = text.Split('.');
         if (parts.Length == 1)
         {
-            if (parts[0].Trim() == "God")
+            var only = parts[0].Trim();
+            if (only == "God")
             {
                 segments = [new Segment("God", "")];
                 return true;
+            }
+
+            if (only is "People" or "Places")
+            {
+                errors.Add($"{label} has fixed children. Use a leaf fixed tag.");
+                return false;
             }
 
             errors.Add($"{label} is not a path.");
@@ -109,11 +117,15 @@ sealed class TagPathSet
         if (last)
         {
             var open = part.LastIndexOf(" (", StringComparison.Ordinal);
-            var close = part.EndsWith(')') ? part.Length - 1 : -1;
-            if (open > 0 && close == part.Length - 1 && part.IndexOf('(', StringComparison.Ordinal) == open)
+            if (open > 0 && part.EndsWith(')') && part.IndexOf('(', StringComparison.Ordinal) == open + 1)
             {
                 name = part[..open];
-                subclassifier = part[(open + 2)..close].Trim();
+                subclassifier = part[(open + 2)..^1].Trim();
+                if (subclassifier.Length == 0)
+                {
+                    errors.Add($"{label} is not a path.");
+                    return false;
+                }
             }
             else if (part.Contains('(') || part.Contains(')'))
             {
@@ -179,6 +191,16 @@ sealed class TagPathSet
         if (segments[0].Subclassifier.Length > 0)
         {
             errors.Add($"Tag '{root}' does not take a Subclassifier.");
+            return false;
+        }
+
+        for (var index = 1; index < segments.Count; index++)
+        {
+            if (!segments[index].Name.Equals(segments[index - 1].Name, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var stop = string.Join('.', segments.Take(index).Select(segment => segment.Name));
+            errors.Add($"{label} repeats {segments[index].Name}. Use {stop}.");
             return false;
         }
 
@@ -263,11 +285,32 @@ sealed class TagPathSet
         return true;
     }
 
-    void Build(List<(string Text, Segment[] Segments)> parsed)
+    void RejectUnused(List<(int Verse, string Text, Segment[] Segments)> parsed)
     {
-        var nodes = new Dictionary<string, TagOutput>(StringComparer.Ordinal);
+        foreach (var group in parsed.GroupBy(
+            item => string.Join('.', item.Segments.Select(segment => segment.Name)),
+            StringComparer.OrdinalIgnoreCase))
+        {
+            var phrases = group.Select(item => item.Segments[^1].Subclassifier).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (!phrases.Any(phrase => phrase.Length == 0) || !phrases.Any(phrase => phrase.Length > 0))
+                continue;
+
+            var name = group.First().Segments[^1].Name;
+            foreach (var text in group
+                .Where(item => item.Segments[^1].Subclassifier.Length > 0)
+                .Select(item => item.Text)
+                .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                Errors.Add($"Tag '{text}' is not a second {name}. Give that person or group its own tag name, such as {name}'s wife.");
+            }
+        }
+    }
+
+    void Build(List<(int Verse, string Text, Segment[] Segments)> parsed)
+    {
+        var nodes = new Dictionary<string, TagOutput>(StringComparer.OrdinalIgnoreCase);
         var parentNames = new Dictionary<TagOutput, List<string>>();
-        foreach (var (text, segments) in parsed)
+        foreach (var (_, text, segments) in parsed)
         {
             string? parentLabel = null;
             TagOutput? parentNode = null;
@@ -310,14 +353,14 @@ sealed class TagPathSet
 
     void RejectSharedLeaves(List<string> errors)
     {
-        foreach (var group in Tags.GroupBy(tag => tag.Name, StringComparer.Ordinal))
+        foreach (var group in Tags.GroupBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase))
         {
             var bare = group.Where(tag => string.IsNullOrEmpty(tag.Subclassifier)).ToList();
             for (var i = 0; i < bare.Count; i++)
             {
                 for (var j = i + 1; j < bare.Count; j++)
                 {
-                    if (RootOf(bare[i]) == RootOf(bare[j]))
+                    if (RootOf(bare[i]).Equals(RootOf(bare[j]), StringComparison.OrdinalIgnoreCase))
                     {
                         errors.Add($"Tag '{group.Key}' needs a Subclassifier.");
                         i = bare.Count;

@@ -19,8 +19,8 @@ public class LabelingContext(DbContextOptions<LabelingContext> options) : DbCont
     {
         modelBuilder.Entity<VerseTag>(entity =>
         {
-            entity.Property(tag => tag.Name).UseCollation("BINARY");
-            entity.Property(tag => tag.Subclassifier).UseCollation("BINARY");
+            entity.Property(tag => tag.Name).UseCollation("NOCASE");
+            entity.Property(tag => tag.Subclassifier).UseCollation("NOCASE");
             entity.Property(tag => tag.Subclassifier).HasDefaultValue("");
         });
 

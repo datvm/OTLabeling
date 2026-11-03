@@ -109,7 +109,7 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             if (ex is LabelingException)
                 throw;
 
-            throw new LabelingException(Redact(ex.Message));
+            throw new LabelingException(Redact(FullMessage(ex)));
         }
     }
 
@@ -136,7 +136,12 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                 || error.EndsWith(" Tags is absent.", StringComparison.Ordinal);
         }
 
-        return error.StartsWith("Tag '", StringComparison.Ordinal);
+        if (error.StartsWith("Tag '", StringComparison.Ordinal))
+            return true;
+
+        return error.EndsWith(" appears before Genesis 12.", StringComparison.Ordinal)
+            || error is "Pre-Israelite appears from Genesis 12 onward."
+                or "Pre-Israelite appears outside Genesis 1-11.";
     }
 
     static string CheckRetryMessage(string originalInput, string response, IReadOnlyList<string> errors)
@@ -152,9 +157,15 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             "A path starts with People, God, or Places, and a dot separates each step.",
             "Examples: People.Non-Israelite.Moabite, People.Others, Places.Others, Places.Non-Israel.Egypt.Goshen, God.LORD.",
             "Israel the person is People.Israelite.Israel. Israel the land is Places.Israel.",
-            "Do not put a classifier on People, God, Places, Antediluvian, Pre-Israelite, Israelite, Non-Israelite, Others, Israel, or Non-Israel.",
-            "A classifier belongs on the last name only, and only when two tags would otherwise have the same path.",
-            "That phrase has at most 40 characters.",
+            "Leave the Subclassifier off. A Subclassifier is minimal, and only when absolutely necessary.",
+            "It is necessary only when this chapter has two different people or places that would otherwise have the same path.",
+            "A title, a description, or a poetic phrase is not a reason to add one.",
+            "A wife, son, family, or other companion is a separate tag. Noah's wife is People.Antediluvian.Noah's wife, not Noah (wife).",
+            "A root is a whole path only when it has no fixed children. God is God, not God.God.",
+            "People and Places have fixed children. Do not use them alone. Use a leaf, such as People.Israelite or People.Others.",
+            "Do not repeat a step. The land is Places.Israel, not Israel.Israel.",
+            "Do not put a Subclassifier on People, God, Places, Antediluvian, Pre-Israelite, Israelite, Non-Israelite, Others, Israel, or Non-Israel.",
+            "Pre-Israelite is only Genesis 1 through 11. From Genesis 12 onward, use People.Israelite or People.Non-Israelite.",
         };
 
         lines.Add("");
@@ -393,7 +404,8 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         if (names.Length == 0)
             return stored;
 
-        var rows = await database.VerseTags.Where(tag => names.Contains(tag.Name)).ToListAsync();
+        var folded = names.Select(name => name.ToLower()).ToArray();
+        var rows = await database.VerseTags.Where(tag => folded.Contains(tag.Name.ToLower())).ToListAsync();
         var frontier = new List<int>();
         foreach (var row in rows)
         {
@@ -440,9 +452,10 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
     static VerseTag? FindStoredTag(StoredTags known, TagOutput tag, IReadOnlyList<string> parentNames)
     {
         var modelSub = ChapterCheck.NormalizeSubclassifier(tag.Subclassifier);
+        VerseTag? same = null;
         foreach (var row in known.Rows)
         {
-            if (!string.Equals(row.Name, tag.Name, StringComparison.Ordinal))
+            if (!string.Equals(row.Name, tag.Name, StringComparison.OrdinalIgnoreCase))
                 continue;
 
             if (row.Id == 0)
@@ -455,7 +468,7 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
 
             if (modelSub.Length > 0)
             {
-                if (!string.Equals(row.Subclassifier, modelSub, StringComparison.Ordinal))
+                if (!string.Equals(row.Subclassifier, modelSub, StringComparison.OrdinalIgnoreCase))
                     continue;
             }
             else if (!IsPathKey(row.Subclassifier))
@@ -464,11 +477,17 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             }
 
             var chain = ParentChain(known, row.Id);
-            if (chain is not null && chain.SequenceEqual(parentNames))
+            if (chain is null || !chain.SequenceEqual(parentNames, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            if (string.Equals(row.Name, tag.Name, StringComparison.Ordinal) &&
+                string.Equals(row.Subclassifier, modelSub, StringComparison.Ordinal))
                 return row;
+
+            same ??= row;
         }
 
-        return null;
+        return same;
     }
 
     static string StoredKey(TagOutput tag, IReadOnlyList<string> parentNames, StoredTags known)
@@ -477,7 +496,7 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
         if (modelSub.Length > 0)
             return modelSub;
 
-        var taken = known.Rows.Any(row => string.Equals(row.Name, tag.Name, StringComparison.Ordinal));
+        var taken = known.Rows.Any(row => string.Equals(row.Name, tag.Name, StringComparison.OrdinalIgnoreCase));
         return taken ? string.Join('.', parentNames) : "";
     }
 
@@ -551,15 +570,20 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
                     .ExecuteDeleteAsync();
             }
 
+            var parentLinks = new HashSet<(int Child, int Parent)>();
             foreach (var item in paths.Tags)
             {
                 if (!paths.ParentNode.TryGetValue(item, out var parent))
                     continue;
 
+                var link = (bySource[item].Id, bySource[parent].Id);
+                if (!parentLinks.Add(link))
+                    continue;
+
                 database.VerseTagParents.Add(new VerseTagParent
                 {
-                    TagId = bySource[item].Id,
-                    ParentTagId = bySource[parent].Id,
+                    TagId = link.Item1,
+                    ParentTagId = link.Item2,
                 });
             }
 
@@ -580,29 +604,36 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
             foreach (var verse in chapter.Verses)
             {
                 var tags = byVerse[verse.VerseNumber].Tags!;
-                for (var index = 0; index < tags.Count; index++)
+                var seenTags = new HashSet<int>();
+                var tagIndex = 1;
+                foreach (var text in tags)
                 {
-                    if (!paths.LeafByPath.TryGetValue(tags[index]!, out var leaf))
-                        throw new LabelingException($"Tag '{tags[index]}' is not a path.");
+                    if (!paths.LeafByPath.TryGetValue(text!, out var leaf))
+                        throw new LabelingException($"Tag '{text}' is not a path.");
 
                     var tag = bySource[leaf];
+                    if (!seenTags.Add(tag.Id))
+                        continue;
+
                     database.LabelRunTags.Add(new LabelRunTag
                     {
                         LabelRunId = run.Id,
                         VerseId = verse.Id,
                         VerseTagId = tag.Id,
-                        TagIndex = index + 1,
+                        TagIndex = tagIndex,
                     });
 
-                    if (resolvedIds.Contains(verse.Id))
-                        continue;
-
-                    database.VerseTagMappings.Add(new VerseTagMapping
+                    if (!resolvedIds.Contains(verse.Id))
                     {
-                        VerseId = verse.Id,
-                        VerseTagId = tag.Id,
-                        TagIndex = index + 1,
-                    });
+                        database.VerseTagMappings.Add(new VerseTagMapping
+                        {
+                            VerseId = verse.Id,
+                            VerseTagId = tag.Id,
+                            TagIndex = tagIndex,
+                        });
+                    }
+
+                    tagIndex++;
                 }
             }
 
@@ -670,6 +701,20 @@ sealed class IsraeliteLabeler(LabelingContext database, ConfigProvider config, I
 
     string Redact(string message) =>
         message.Replace(apiKey, "[api key]", StringComparison.Ordinal);
+
+    static string FullMessage(Exception exception)
+    {
+        var parts = new List<string>();
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (parts.Contains(current.Message))
+                continue;
+
+            parts.Add(current.Message);
+        }
+
+        return string.Join(' ', parts);
+    }
 }
 
 sealed record SelectedChapter(BibleBook Book, int Chapter, IReadOnlyList<BibleVerse> Verses);
