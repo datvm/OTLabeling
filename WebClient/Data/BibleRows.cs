@@ -55,6 +55,13 @@ public sealed class VerseTagParentLink
     public int ParentTagId { get; set; }
 }
 
+public sealed class TagVerseLink
+{
+    public int VerseId { get; set; }
+    public int BookId { get; set; }
+    public int TagId { get; set; }
+}
+
 public sealed class VerseTagRow
 {
     public int Id { get; set; }

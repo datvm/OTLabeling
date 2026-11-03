@@ -1,12 +1,14 @@
 ﻿@page "/tags/{Id:int}"
 @inject LabelingDatabase Db
+@inject TagCatalog Catalog
+@inject NavigationManager Navigation
 
 <PageTitle>@(tag?.Label ?? "Tag")</PageTitle>
 
 @if (error is not null)
 {
     <div class="alert alert-danger" role="alert">@(error)</div>
-    <a class="btn btn-outline-secondary" href="tags">Back to tags</a>
+    <a class="btn btn-outline-secondary" href="@(selection.Href("tags", Catalog.Loaded ? Catalog.Books : []))">Back to tags</a>
 }
 else if (tag is null)
 {
@@ -18,14 +20,17 @@ else
 {
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="tags">Tags</a></li>
+            <li class="breadcrumb-item"><a href="@(selection.Href("tags", Catalog.Books))">Tags</a></li>
             <li class="breadcrumb-item active" aria-current="page">@(tag.Label)</li>
         </ol>
     </nav>
 
     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
         <h1 class="h3 mb-0">@(tag.Label)</h1>
-        <span class="badge text-bg-secondary">@(tag.VerseCount)</span>
+        @if (verses is not null)
+        {
+            <span class="badge text-bg-secondary">@(verses.Count)</span>
+        }
     </div>
 
     @if (parents.Count > 0)
@@ -33,10 +38,12 @@ else
         <p class="mb-3">
             @foreach (var parent in parents)
             {
-                <a class="badge text-bg-light border text-decoration-none me-1" href="@($"tags/{parent.Id}")">@(parent.Label)</a>
+                <a class="badge text-bg-light border text-decoration-none me-1" href="@(TagHref(parent.Id))">@(parent.Label)</a>
             }
         </p>
     }
+
+    <TagFilterPanel Selection="@(selection)" Catalog="@(Catalog)" Changed="@(OnFilterChanged)" Cleared="@(OnCleared)" />
 
     @if (verses is null)
     {
@@ -46,7 +53,7 @@ else
     }
     else if (verses.Count == 0)
     {
-        <p class="text-secondary mb-0">This tag has no verses.</p>
+        <p class="text-secondary mb-0">@(selection.HasVerseFilter ? "No verses match this filter." : "This tag has no verses.")</p>
     }
     else
     {
@@ -82,7 +89,7 @@ else
                     <div class="list-group mb-3">
                         @foreach (var verse in chapterVerses)
                         {
-                            <VerseRow VerseNumber="@(verse.VerseNumber)" Text="@(verse.Text)" Tags="@(verse.Tags)" ActiveTagId="@(tag.Id)" />
+                            <VerseRow VerseNumber="@(verse.VerseNumber)" Text="@(verse.Text)" Tags="@(verse.Tags)" ActiveTagId="@(tag.Id)" TagLink="@(TagHref)" />
                         }
                     </div>
                 }
@@ -92,51 +99,167 @@ else
 }
 
 @code {
+    readonly TagFilterSelection selection = new();
+
     [Parameter]
     public int Id { get; set; }
 
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? KeywordQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "books")]
+    public string[]? BookQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tags")]
+    public int[]? TagQueryIds { get; set; }
+
     VerseTagRow? tag;
     List<VerseTagRef> parents = [];
+    List<TaggedVerseRow>? allVerses;
     List<TaggedVerseRow>? verses;
     List<string> chapterKeys = [];
     HashSet<string> openChapters = [];
-    int? loadedId;
+    int loadedId;
+    int loadVersion;
+    string? writtenHref;
     string? error;
 
     protected override async Task OnParametersSetAsync()
     {
-        if (loadedId == Id)
-            return;
-
-        loadedId = Id;
-        error = null;
-        tag = null;
-        parents = [];
-        verses = null;
-        chapterKeys = [];
-        openChapters = [];
-
         try
         {
-            tag = await Db.GetVerseTagAsync(Id);
-            if (tag is null)
+            await Catalog.LoadAsync();
+            var current = RelativeUri();
+            var ownNavigation = writtenHref is not null
+                && selection.MatchesLocation(current, PagePath(), Catalog.Books)
+                && selection.MatchesLocation(writtenHref, PagePath(), Catalog.Books);
+            if (!ownNavigation)
             {
-                error = $"No tag has id {Id}.";
-                return;
+                selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, Catalog.Books, Catalog.TagsById);
+                writtenHref = current;
             }
 
-            parents = (await Db.GetVerseTagParentsAsync(Id)).ToList();
-            verses = (await Db.GetVersesForTagAsync(Id)).ToList();
-            chapterKeys = verses
-                .Select(verse => $"{verse.BookId}:{verse.Chapter}")
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
+            if (loadedId != Id)
+                await LoadTag();
+            else if (!ownNavigation)
+                ShowVerses();
         }
         catch (Exception ex)
         {
             error = ex.Message;
         }
     }
+
+    async Task LoadTag()
+    {
+        var version = ++loadVersion;
+        var requestedId = Id;
+        error = null;
+        tag = null;
+        parents = [];
+        allVerses = null;
+        verses = null;
+        chapterKeys = [];
+        openChapters = [];
+
+        var row = await Db.GetVerseTagAsync(requestedId);
+        if (version != loadVersion)
+            return;
+
+        if (row is null)
+        {
+            error = $"No tag has id {requestedId}.";
+            return;
+        }
+
+        var parentRows = (await Db.GetVerseTagParentsAsync(requestedId)).ToList();
+        if (version != loadVersion)
+            return;
+
+        var verseRows = (await Db.GetVersesForTagAsync(requestedId)).ToList();
+        if (version != loadVersion)
+            return;
+
+        loadedId = requestedId;
+        tag = row;
+        parents = parentRows;
+        allVerses = verseRows;
+        ShowVerses();
+    }
+
+    void OnFilterChanged()
+    {
+        ShowVerses();
+        selection.RefreshSuggestions(Catalog);
+        SyncUrl();
+    }
+
+    void OnCleared()
+    {
+        selection.Clear(Catalog.TagsById);
+        OnFilterChanged();
+    }
+
+    void ShowVerses()
+    {
+        if (allVerses is null || !Catalog.Loaded)
+            return;
+
+        Catalog.Apply(selection.BookIds, selection.TagIds);
+        verses = allVerses.Where(MatchesFilter).ToList();
+        chapterKeys = verses
+            .Select(verse => $"{verse.BookId}:{verse.Chapter}")
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    bool MatchesFilter(TaggedVerseRow verse)
+    {
+        if (selection.BookIds.Count > 0 && !selection.BookIds.Contains(verse.BookId))
+            return false;
+
+        foreach (var tagId in selection.TagIds)
+        {
+            if (!VerseHas(verse, tagId))
+                return false;
+        }
+
+        return true;
+    }
+
+    bool VerseHas(TaggedVerseRow verse, int tagId)
+    {
+        foreach (var chain in verse.Tags)
+        {
+            foreach (var item in chain)
+            {
+                if (Catalog.Index.Covers(tagId, item.Id))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    void SyncUrl()
+    {
+        var path = PagePath();
+        var href = selection.Href(path, Catalog.Books);
+        if (selection.MatchesLocation(RelativeUri(), path, Catalog.Books))
+        {
+            writtenHref = href;
+            return;
+        }
+
+        writtenHref = href;
+        Navigation.NavigateTo(href, replace: true);
+    }
+
+    string PagePath() => $"tags/{Id}";
+
+    string TagHref(int id) => selection.Href($"tags/{id}", Catalog.Books);
+
+    string RelativeUri() => Navigation.ToBaseRelativePath(Navigation.Uri);
 
     EventCallback ChapterToggle(string key) =>
         EventCallback.Factory.Create(this, () => ToggleChapter(key));

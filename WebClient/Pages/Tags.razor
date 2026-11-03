@@ -1,11 +1,12 @@
 @page "/tags"
-@inject LabelingDatabase Db
+@inject TagCatalog Catalog
+@inject NavigationManager Navigation
 
 <PageTitle>Tags</PageTitle>
 
 <h1 class="h3 mb-3">Tags</h1>
 
-@if (tags is null)
+@if (!ready)
 {
     @if (error is not null)
     {
@@ -18,41 +19,73 @@
         </p>
     }
 }
-else if (tags.Count == 0)
+else if (Catalog.Tags.Count == 0)
 {
     <p class="text-secondary mb-0">No tags yet.</p>
 }
 else
 {
-    @if (panelPaths.Count > 0)
+    <TagFilterPanel Selection="@(selection)" Catalog="@(Catalog)" Changed="@(OnFilterChanged)" Cleared="@(OnCleared)" />
+
+    @if (selection.HasVerseFilter)
     {
-        <div class="d-flex flex-wrap gap-2 mb-3">
-            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ExpandAll">Expand all</button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CollapseAll">Collapse all</button>
-        </div>
+        <p class="text-secondary mb-3">@(MatchText())</p>
     }
-    <TagNodes Nodes="@(roots)"
-              ChildrenByParent="@(childrenByParent)"
-              PathPrefix="@("")"
-              IsOpen="@(IsPanelOpen)"
-              OnToggle="@(Toggle)" />
+
+    @if (roots.Count == 0)
+    {
+        <p class="text-secondary mb-0">No tags match.</p>
+    }
+    else
+    {
+        @if (panelPaths.Count > 0)
+        {
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ExpandAll">Expand all</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CollapseAll">Collapse all</button>
+            </div>
+        }
+        <TagNodes Nodes="@(roots)"
+                  ChildrenByParent="@(childrenByParent)"
+                  PathPrefix="@("")"
+                  IsOpen="@(IsPanelOpen)"
+                  OnToggle="@(Toggle)"
+                  LinkFor="@(TagHref)" />
+    }
 }
 
 @code {
-    List<VerseTagRow>? tags;
+    readonly TagFilterSelection selection = new();
+
     List<VerseTagRow> roots = [];
     Dictionary<int, List<VerseTagRow>> childrenByParent = [];
     List<string> panelPaths = [];
     HashSet<string> openPaths = [];
+    Dictionary<int, bool> visible = [];
+    Dictionary<int, bool> underSelection = [];
+    string term = "";
+    string? writtenHref;
+    bool ready;
     string? error;
+
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? KeywordQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "books")]
+    public string[]? BookQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tags")]
+    public int[]? TagQueryIds { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            tags = (await Db.GetVerseTagsAsync()).ToList();
-            var links = await Db.GetVerseTagParentLinksAsync();
-            BuildTree(tags, links);
+            await Catalog.LoadAsync();
+            selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, Catalog.Books, Catalog.TagsById);
+            writtenHref = RelativeUri();
+            Apply();
+            ready = true;
         }
         catch (Exception ex)
         {
@@ -60,35 +93,161 @@ else
         }
     }
 
-    void BuildTree(IReadOnlyList<VerseTagRow> rows, IReadOnlyList<VerseTagParentLink> links)
+    protected override void OnParametersSet()
     {
-        var byId = rows.ToDictionary(tag => tag.Id);
-        var childIds = new HashSet<int>();
-        childrenByParent = [];
-        foreach (var link in links)
+        if (!ready)
+            return;
+
+        var current = RelativeUri();
+        if (writtenHref is not null && selection.MatchesLocation(current, "tags", Catalog.Books)
+            && selection.MatchesLocation(writtenHref, "tags", Catalog.Books))
+            return;
+
+        writtenHref = current;
+        if (!selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, Catalog.Books, Catalog.TagsById))
+            return;
+
+        Apply();
+    }
+
+    void OnFilterChanged()
+    {
+        Apply();
+        selection.RefreshSuggestions(Catalog);
+        SyncUrl();
+    }
+
+    void OnCleared()
+    {
+        selection.Clear(Catalog.TagsById);
+        openPaths.Clear();
+        OnFilterChanged();
+    }
+
+    void Apply()
+    {
+        Catalog.Apply(selection.BookIds, selection.TagIds);
+        selection.SyncSelected(Catalog.TagsById);
+        RebuildTree();
+    }
+
+    void SyncUrl()
+    {
+        var href = selection.Href("tags", Catalog.Books);
+        if (selection.MatchesLocation(RelativeUri(), "tags", Catalog.Books))
         {
-            if (!byId.TryGetValue(link.TagId, out var child) || !byId.ContainsKey(link.ParentTagId))
+            writtenHref = href;
+            return;
+        }
+
+        writtenHref = href;
+        Navigation.NavigateTo(href, replace: true);
+    }
+
+    string TagHref(int id) => selection.Href($"tags/{id}", Catalog.Books);
+
+    string RelativeUri() => Navigation.ToBaseRelativePath(Navigation.Uri);
+
+    void RebuildTree()
+    {
+        term = selection.Keyword.Trim();
+        visible.Clear();
+        underSelection.Clear();
+
+        var visibleIds = new HashSet<int>();
+        foreach (var tag in Catalog.Tags)
+        {
+            if (IsVisible(tag.Id))
+                visibleIds.Add(tag.Id);
+        }
+
+        childrenByParent = [];
+        var childIds = new HashSet<int>();
+        foreach (var link in Catalog.Links)
+        {
+            if (!visibleIds.Contains(link.TagId) || !visibleIds.Contains(link.ParentTagId))
                 continue;
 
-            childIds.Add(child.Id);
+            childIds.Add(link.TagId);
             if (!childrenByParent.TryGetValue(link.ParentTagId, out var children))
             {
                 children = [];
                 childrenByParent.Add(link.ParentTagId, children);
             }
 
-            children.Add(child);
+            children.Add(Catalog.TagsById[link.TagId]);
         }
 
         foreach (var children in childrenByParent.Values)
             children.Sort((left, right) => string.Compare(left.Label, right.Label, StringComparison.Ordinal));
 
-        roots = rows
-            .Where(tag => !childIds.Contains(tag.Id))
+        roots = Catalog.Tags
+            .Where(tag => visibleIds.Contains(tag.Id) && !childIds.Contains(tag.Id))
             .OrderBy(tag => tag.Label, StringComparer.Ordinal)
             .ToList();
         panelPaths = [];
         CollectPaths(roots, "");
+        if (term.Length > 0 || selection.TagIds.Count > 0)
+        {
+            foreach (var path in panelPaths)
+                openPaths.Add(path);
+        }
+    }
+
+    bool IsVisible(int id)
+    {
+        if (visible.TryGetValue(id, out var known))
+            return known;
+
+        visible[id] = false;
+        var show = IsHit(id);
+        if (!show)
+        {
+            foreach (var child in Catalog.Index.ChildrenOf(id))
+            {
+                if (IsVisible(child))
+                {
+                    show = true;
+                    break;
+                }
+            }
+        }
+
+        visible[id] = show;
+        return show;
+    }
+
+    bool IsHit(int id)
+    {
+        if (IsUnderSelection(id))
+            return false;
+
+        if (selection.HasVerseFilter && Catalog.Index.CountOf(id) == 0)
+            return false;
+
+        return term.Length == 0
+            || Catalog.TagsById[id].Label.Contains(term, StringComparison.OrdinalIgnoreCase);
+    }
+
+    bool IsUnderSelection(int id)
+    {
+        if (selection.TagIds.Count == 0)
+            return false;
+
+        if (underSelection.TryGetValue(id, out var known))
+            return known;
+
+        underSelection[id] = false;
+        foreach (var parent in Catalog.Index.ParentsOf(id))
+        {
+            if (selection.TagIds.Contains(parent) || IsUnderSelection(parent))
+            {
+                underSelection[id] = true;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     void CollectPaths(IReadOnlyList<VerseTagRow> nodes, string prefix)
@@ -123,4 +282,8 @@ else
     }
 
     void CollapseAll() => openPaths.Clear();
+
+    string MatchText() => Catalog.MatchedVerseCount == 1
+        ? "1 verse matches."
+        : $"{Catalog.MatchedVerseCount} verses match.";
 }

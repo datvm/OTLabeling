@@ -124,6 +124,14 @@ public sealed class LabelingDatabase(IJSRuntime js)
             FROM VerseTagParents link
             """);
 
+    public Task<IReadOnlyList<TagVerseLink>> GetTagVerseLinksAsync()
+        => QueryAsync<TagVerseLink>(
+            """
+            SELECT m.VerseId, v.BookId, m.VerseTagId AS TagId
+            FROM VerseTagMappings m
+            INNER JOIN BibleVerses v ON v.Id = m.VerseId
+            """);
+
     public Task<IReadOnlyList<VerseTagRef>> GetVerseTagParentsAsync(int tagId)
         => QueryAsync<VerseTagRef>(
             """

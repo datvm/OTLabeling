@@ -1,0 +1,166 @@
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h5 mb-0">Filter</h2>
+            @if (Selection.HasAnyFilter)
+            {
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OnCleared">Clear</button>
+            }
+        </div>
+
+        <label class="form-label" for="tag-keyword">Keyword</label>
+        <input id="tag-keyword" class="form-control mb-3" autocomplete="off" placeholder="Tag name"
+               @bind="@(Selection.Keyword)" @bind:event="oninput" @bind:after="OnKeyword" />
+
+        <div class="mb-3">
+            <div class="form-label">Books</div>
+            @if (SelectedBooks().Count > 0)
+            {
+                <div class="d-flex flex-wrap gap-1 mb-2">
+                    @foreach (var book in SelectedBooks())
+                    {
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                aria-label="@($"Remove {book.Name}")"
+                                @onclick="@(() => RemoveBook(book.Id))">
+                            @(book.Name)
+                            <span aria-hidden="true">×</span>
+                        </button>
+                    }
+                </div>
+            }
+            <button type="button" class="btn btn-outline-secondary btn-sm" aria-controls="filter-books" aria-expanded="@(Selection.BooksOpen)" @onclick="ToggleBooks">
+                @(Selection.BooksOpen ? "Hide books" : "Choose books")
+            </button>
+            @if (Selection.BooksOpen)
+            {
+                <div id="filter-books" class="filter-scroll border rounded mt-2 p-2">
+                    @for (var testamentIndex = 0; testamentIndex < Testaments.Length; testamentIndex++)
+                    {
+                        var testament = Testaments[testamentIndex];
+                        var rows = Catalog.Books.Where(book => book.Testament == testament).ToList();
+                        if (rows.Count == 0)
+                            continue;
+
+                        <h3 class="@($"h6 {(testamentIndex == 0 ? "mt-0" : "mt-3")} mb-2")">@(testament)</h3>
+                        <div class="filter-books">
+                            @foreach (var book in rows)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="@($"filter-book-{book.Id}")"
+                                           checked="@(Selection.BookIds.Contains(book.Id))"
+                                           @onchange="@((ChangeEventArgs change) => SetBook(book.Id, change))" />
+                                    <label class="form-check-label" for="@($"filter-book-{book.Id}")">@(book.Name)</label>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <label class="form-label" for="tag-add">Tags</label>
+        @if (Selection.SelectedTags.Count > 0)
+        {
+            <div class="d-flex flex-wrap gap-1 mb-2">
+                @foreach (var tag in Selection.SelectedTags)
+                {
+                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                            title="@(Catalog.Index.PathOf(tag.Id))"
+                            aria-label="@($"Remove {Catalog.ChipText(tag)}")"
+                            @onclick="@(() => RemoveTag(tag.Id))">
+                        @(Catalog.ChipText(tag))
+                        <span aria-hidden="true">×</span>
+                    </button>
+                }
+            </div>
+        }
+        <input id="tag-add" class="form-control" autocomplete="off" placeholder="Add a tag, such as Isaac"
+               @bind="@(Selection.TagQuery)" @bind:event="oninput" @bind:after="OnTagQuery" @onkeydown="OnTagKeyDown" />
+        <div class="form-text">Every selected tag must be on the verse. A tag stays when it shares those verses. The number is the count of those verses.</div>
+        @if (Selection.Suggestions.Count > 0)
+        {
+            <div class="list-group mt-2">
+                @foreach (var tag in Selection.Suggestions)
+                {
+                    <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-2 text-start"
+                            @onclick="@(() => PickTag(tag.Id))">
+                        <span>@(Catalog.Index.PathOf(tag.Id))</span>
+                        <span class="badge text-bg-secondary">@(tag.VerseCount)</span>
+                    </button>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    static readonly string[] Testaments = [BibleBookRow.OldTestament, BibleBookRow.NewTestament];
+
+    [Parameter, EditorRequired]
+    public TagFilterSelection Selection { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public TagCatalog Catalog { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback Changed { get; set; }
+
+    [Parameter]
+    public EventCallback Cleared { get; set; }
+
+    List<BibleBookRow> SelectedBooks() =>
+        Catalog.Books.Where(book => Selection.BookIds.Contains(book.Id)).ToList();
+
+    void ToggleBooks() => Selection.BooksOpen = !Selection.BooksOpen;
+
+    void OnKeyword() => Changed.InvokeAsync();
+
+    void SetBook(int bookId, ChangeEventArgs change)
+    {
+        if (change.Value is true)
+            Selection.BookIds.Add(bookId);
+        else
+            Selection.BookIds.Remove(bookId);
+
+        Changed.InvokeAsync();
+    }
+
+    void RemoveBook(int bookId)
+    {
+        Selection.BookIds.Remove(bookId);
+        Changed.InvokeAsync();
+    }
+
+    void PickTag(int id)
+    {
+        if (!Selection.TagIds.Contains(id))
+            Selection.TagIds.Add(id);
+
+        Selection.TagQuery = "";
+        Selection.Suggestions = [];
+        Changed.InvokeAsync();
+    }
+
+    void RemoveTag(int id)
+    {
+        Selection.TagIds.Remove(id);
+        Changed.InvokeAsync();
+    }
+
+    void OnTagQuery() => Selection.RefreshSuggestions(Catalog);
+
+    void OnTagKeyDown(KeyboardEventArgs key)
+    {
+        if (key.Key == "Escape")
+        {
+            Selection.TagQuery = "";
+            Selection.Suggestions = [];
+            return;
+        }
+
+        if (key.Key == "Enter" && Selection.Suggestions.Count > 0)
+            PickTag(Selection.Suggestions[0].Id);
+    }
+
+    void OnCleared() => Cleared.InvokeAsync();
+}

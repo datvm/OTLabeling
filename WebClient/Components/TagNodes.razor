@@ -3,7 +3,7 @@
     var children = ChildrenOf(tag);
     var path = PanelPath.Combine(PathPrefix, tag.Id);
     <div class="d-flex flex-wrap align-items-baseline gap-2 py-1">
-        <a href="@($"tags/{tag.Id}")">@(tag.Label)</a>
+        <a href="@(LinkFor(tag.Id))">@(tag.Label)</a>
         <span class="badge text-bg-secondary">@(tag.VerseCount)</span>
         @if (children.Count > 0)
         {
@@ -17,7 +17,8 @@
                       ChildrenByParent="@(ChildrenByParent)"
                       PathPrefix="@(path)"
                       IsOpen="@(IsOpen)"
-                      OnToggle="@(OnToggle)" />
+                      OnToggle="@(OnToggle)"
+                      LinkFor="@(LinkFor)" />
         </div>
     }
 }
@@ -37,6 +38,9 @@
 
     [Parameter]
     public EventCallback<string> OnToggle { get; set; }
+
+    [Parameter]
+    public Func<int, string> LinkFor { get; set; } = static id => $"tags/{id}";
 
     EventCallback PanelToggle(string path) =>
         EventCallback.Factory.Create(this, () => OnToggle.InvokeAsync(path));

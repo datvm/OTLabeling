@@ -16,7 +16,7 @@
                                 {
                                     <span class="text-secondary" aria-hidden="true">›</span>
                                 }
-                                <a class="badge border text-decoration-none @(tag.Id == ActiveTagId ? "text-bg-primary" : "text-bg-light text-dark")" href="@($"tags/{tag.Id}")">@(tag.Label)</a>
+                                <a class="badge border text-decoration-none @(tag.Id == ActiveTagId ? "text-bg-primary" : "text-bg-light text-dark")" href="@(TagHref(tag.Id))">@(tag.Label)</a>
                             }
                         </span>
                     }
@@ -38,4 +38,9 @@
 
     [Parameter]
     public int? ActiveTagId { get; set; }
+
+    [Parameter]
+    public Func<int, string>? TagLink { get; set; }
+
+    string TagHref(int id) => TagLink?.Invoke(id) ?? $"tags/{id}";
 }
