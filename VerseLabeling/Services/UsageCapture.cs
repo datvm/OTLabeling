@@ -11,6 +11,7 @@ sealed class RequestUsage
     public required long OutputTokens { get; init; }
     public long? ReasoningTokens { get; init; }
     public decimal? Cost { get; init; }
+    public string? AppliedEffort { get; set; }
 }
 
 sealed class UsageCaptureHandler(UsageCapture capture, string? reasoningEffort) : DelegatingHandler
@@ -19,8 +20,9 @@ sealed class UsageCaptureHandler(UsageCapture capture, string? reasoningEffort) 
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
+        string? appliedEffort = null;
         if (reasoningEffort is not null)
-            await AddReasoningAsync(request, cancellationToken);
+            appliedEffort = await AddReasoningAsync(request, cancellationToken);
 
         var response = await base.SendAsync(request, cancellationToken);
         if (response.Content is null || !response.IsSuccessStatusCode)
@@ -28,7 +30,10 @@ sealed class UsageCaptureHandler(UsageCapture capture, string? reasoningEffort) 
 
         var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
         if (TryRead(bytes) is RequestUsage usage)
+        {
+            usage.AppliedEffort = appliedEffort;
             capture.Latest = usage;
+        }
 
         var copy = new ByteArrayContent(bytes);
         foreach (var header in response.Content.Headers)
@@ -77,10 +82,10 @@ sealed class UsageCaptureHandler(UsageCapture capture, string? reasoningEffort) 
         }
     }
 
-    async Task AddReasoningAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    async Task<string> AddReasoningAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         if (request.Content is null)
-            return;
+            throw new LabelingException("The request has no body, so ReasoningEffort was not sent.");
 
         var bytes = await request.Content.ReadAsByteArrayAsync(cancellationToken);
         System.Text.Json.Nodes.JsonNode? node;
@@ -91,20 +96,42 @@ sealed class UsageCaptureHandler(UsageCapture capture, string? reasoningEffort) 
         catch (JsonException)
         {
             Replace(request, bytes);
-            return;
+            throw new LabelingException("The request body is not JSON, so ReasoningEffort was not sent.");
         }
 
         if (node is not System.Text.Json.Nodes.JsonObject body)
         {
             Replace(request, bytes);
-            return;
+            throw new LabelingException("The request body is not a JSON object, so ReasoningEffort was not sent.");
         }
 
         body["reasoning"] = new System.Text.Json.Nodes.JsonObject
         {
             ["effort"] = reasoningEffort,
         };
-        Replace(request, JsonSerializer.SerializeToUtf8Bytes(body));
+        var written = JsonSerializer.SerializeToUtf8Bytes(body);
+        Replace(request, written);
+        if (!WrittenEffortIs(written, reasoningEffort!))
+            throw new LabelingException("ReasoningEffort was not written on the request.");
+
+        return reasoningEffort!;
+    }
+
+    static bool WrittenEffortIs(byte[] bytes, string effort)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(bytes);
+            return document.RootElement.TryGetProperty("reasoning", out var reasoning) &&
+                reasoning.ValueKind == JsonValueKind.Object &&
+                reasoning.TryGetProperty("effort", out var value) &&
+                value.ValueKind == JsonValueKind.String &&
+                value.GetString() == effort;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     static void Replace(HttpRequestMessage request, byte[] bytes)

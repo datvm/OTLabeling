@@ -300,8 +300,9 @@ sealed class IsraeliteLabeler(
             totalReasoningText = $" Reasoning {totalReasoningTokens}.";
         }
 
+        var effortText = captured?.AppliedEffort is string effort ? $" Effort {effort}." : "";
         Console.WriteLine(
-            $"Tokens in {input.Value} out {output.Value}.{reasoningText} Cost {requestCost}. Total in {totalInputTokens} out {totalOutputTokens}.{totalReasoningText} Cost {totalCostText}.");
+            $"Tokens in {input.Value} out {output.Value}.{reasoningText}{effortText} Cost {requestCost}. Total in {totalInputTokens} out {totalOutputTokens}.{totalReasoningText} Cost {totalCostText}.");
     }
 
     decimal? RateCost(long input, long output)

@@ -291,9 +291,13 @@ Add an `Ai` object in `project-conf.json`.
 `ReasoningEffort` sets the thinking effort on each chat request.
 The values are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`.
 `none` disables reasoning.
+`minimal` allows thinking up to about 10 percent of the model's output limit.
+That limit is large, so `minimal` can still spend many thousands of reasoning tokens.
 A missing or blank `ReasoningEffort` does not send the field.
 The model then uses its own default.
 Any other value is an error.
+When `ReasoningEffort` is set, the program writes `reasoning.effort` on the chat request body.
+The request fails when that field cannot be written.
 A missing value means the field is absent.
 Set both costs, or set neither.
 A negative cost is an error.
@@ -313,8 +317,9 @@ The program writes this line after each successful response:
 
 When the response includes `usage.completion_tokens_details.reasoning_tokens`, the line names that count:
 
-`Tokens in 3985 out 13726. Reasoning 12800. Cost $0.014. Total in 32352 out 153601. Reasoning 140000. Cost $0.144.`
+`Tokens in 3985 out 13726. Reasoning 12800. Effort minimal. Cost $0.014. Total in 32352 out 153601. Reasoning 140000. Cost $0.144.`
 
+`Effort` is the value written on that request.
 `out` includes the reasoning tokens.
 `Reasoning` is the thinking part of `out`.
 
