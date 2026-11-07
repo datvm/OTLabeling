@@ -1,0 +1,54 @@
+@page "/topics"
+@inject TopicCatalog Catalog
+
+<PageTitle>Topics</PageTitle>
+
+<h1 class="h3 mb-3">Topics</h1>
+
+@if (!ready)
+{
+    @if (error is not null)
+    {
+        <div class="alert alert-danger" role="alert">@(error)</div>
+    }
+    else
+    {
+        <p class="text-secondary mb-0">
+            <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading topics...
+        </p>
+    }
+}
+else if (Catalog.Topics.Count == 0)
+{
+    <p class="text-secondary mb-0">No topics yet.</p>
+}
+else
+{
+    @foreach (var topic in Catalog.Topics)
+    {
+        <div class="d-flex flex-wrap align-items-baseline gap-2 py-1">
+            <a href="@($"topics/{Uri.EscapeDataString(topic.Code)}")">@(topic.Title)</a>
+            <span class="text-secondary">@(topic.Code)</span>
+            <span class="badge text-bg-secondary">@(topic.YesCount)</span>
+            <span class="text-secondary">Yes</span>
+        </div>
+    }
+}
+
+@code {
+    bool ready;
+    string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await Catalog.LoadAsync();
+            ready = true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+}

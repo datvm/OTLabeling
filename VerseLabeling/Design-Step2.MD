@@ -93,9 +93,22 @@ A line break in the verse text becomes a space.
 
 Each question is a yes/no question.
 The question text names the verse in `chapter`, then gives the topic question.
-The other verses, and `previous` when it is present, may show who or what that verse refers to.
+The named verse must state the fact the question asks about.
+Another verse may identify who or what a word in the named verse refers to.
 That includes a pronoun.
+Another verse does not supply an action, a speech, a promise, a judgment, or an attitude.
+A Yes for one question does not make another question Yes.
 A nation, people, or group counts only when `chapter` or `previous` names it.
+A promise or a blessing is a word from God, or a report of that word.
+A human offer, agreement, marriage proposal, or wish is not that promise.
+Hostility, a threat, conflict, or judgment counts only when the named verse states it.
+An Israelite is a person or group in the line of promise that begins with Abraham in Genesis 12 and continues through Isaac, Jacob, and their descendants.
+The program uses Israelite only from Genesis 12 onward.
+Before Genesis 12, a person or group is not Israelite and not a non-Israelite.
+Hebrew, children of Israel, house of Jacob, and a similar expression count as Israelite when `chapter` or `previous` makes that identification.
+A non-Israelite is a person or group outside that line.
+A foreigner is a non-Israelite.
+A sojourner counts as a foreigner when `chapter` or `previous` places that person outside the Israelite line.
 
 The program stores `https://api.typesafe.ai` in `LabelRun.BaseUrl`.
 The program stores `Jev.Model` in `LabelRun.Model`.
@@ -142,6 +155,14 @@ The program writes the raw response before the check.
 The program does not write a raw file when the response has no body.
 The program does not store the chapter when the check fails.
 A failed check leaves that chapter's `LabelRunChapter.Filled` false.
+
+The default context length is 64,000 tokens for the state and all questions together.
+The state and one question together must also fit in 32,000 tokens.
+HTTP 400 with `max_tokens_exceeded` means the request is over that length.
+The program sends the same request again with the header `TypeSafe-Danger-Zone-Long-Context` set to `true`.
+That header raises both limits to 262,000 tokens.
+The program sends that header only after `max_tokens_exceeded`.
+A second `max_tokens_exceeded` stops the run.
 
 HTTP 429, HTTP 503, and HTTP 529 use the retry rule in `Design.MD`.
 HTTP 529 is the overloaded response from Jev.

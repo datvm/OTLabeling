@@ -86,11 +86,21 @@ public sealed class TagIndex
         return false;
     }
 
-    public void Apply(IReadOnlySet<int> bookIds, IReadOnlyList<int> tagIds, bool matchAnyTag)
+    public void Apply(
+        IReadOnlySet<int> bookIds,
+        IReadOnlyList<int> tagIds,
+        bool matchAnyTag,
+        HashSet<int>? topicVerseIds)
     {
         HashSet<int>? matched = null;
-        if (bookIds.Count > 0 || tagIds.Count > 0)
-            matched = Match(bookIds, tagIds, matchAnyTag);
+        if (bookIds.Count > 0 || tagIds.Count > 0 || topicVerseIds is not null)
+        {
+            matched = bookIds.Count > 0 || tagIds.Count > 0
+                ? Match(bookIds, tagIds, matchAnyTag)
+                : new HashSet<int>(allVerses);
+            if (topicVerseIds is not null)
+                matched.IntersectWith(topicVerseIds);
+        }
 
         MatchedVerseCount = matched?.Count ?? allVerses.Count;
         counts.Clear();

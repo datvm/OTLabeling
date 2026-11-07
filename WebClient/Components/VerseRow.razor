@@ -49,6 +49,15 @@
                     }
                 </div>
             }
+            @if (Topics.Count > 0)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @foreach (var topic in Topics)
+                    {
+                        <a class="@(TopicClass(topic.Answer))" href="@($"topics/{Uri.EscapeDataString(topic.Code)}")" title="@(topic.Tip)">@(topic.Title)</a>
+                    }
+                </div>
+            }
         </div>
     </div>
 </div>
@@ -62,6 +71,9 @@
 
     [Parameter]
     public IReadOnlyList<List<VerseTagRef>> Tags { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<VerseTopicChip> Topics { get; set; } = [];
 
     [Parameter]
     public int? ActiveTagId { get; set; }
@@ -83,5 +95,10 @@
     string TagClass(int id) =>
         id == ActiveTagId
             ? "badge border text-decoration-none text-bg-primary"
+            : "badge border text-decoration-none text-bg-light text-dark";
+
+    static string TopicClass(string answer) =>
+        answer == "Yes"
+            ? "badge text-decoration-none text-bg-dark"
             : "badge border text-decoration-none text-bg-light text-dark";
 }

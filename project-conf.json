@@ -16,7 +16,7 @@
     "VerseLabeling": {
         //"Step": "clear-runs",
         "Step": "label-topics",
-        "Books": [ "GEN" ],
+        "Books": [ "*" ],
         "Chapters": "",
         "Summary": "",
         "ImmediateContext": "",
@@ -25,10 +25,45 @@
                 "Code": "HasForeigner",
                 "Title": "Foreign nation or people group",
                 "Question": "Does the verse mention a named non-Israelite nation, people, or ethnic group (e.g., Egypt, Canaan, Philistia, Moab, Assyria, Babylon)?"
+            },
+            {
+                "Code": "HostileForeigner",
+                "Title": "Hostile or enemy foreigner",
+                "Question": "Does this verse itself present a non-Israelite or foreign group as an enemy, a threat, or a party in conflict?"
+            },
+            {
+                "Code": "FriendlyForeigner",
+                "Title": "Friendly or allied interaction",
+                "Question": "Does the verse show a positive or cooperative relationship with a non-Israelite (alliance, help, hospitality, trade, or mutual recognition)?"
+            },
+            {
+                "Code": "NationsBlessing",
+                "Title": "Blessing or promise involving the nations",
+                "Question": "Does this verse itself contain a promise or blessing from God that includes non-Israelite nations or peoples, or says that they will be blessed? A human offer, agreement, marriage proposal, or wish is No."
+            },
+            {
+                "Code": "ForeignJudgment",
+                "Title": "Judgment against a foreign nation",
+                "Question": "Does the verse announce or describe divine judgment, curse, or destruction directed at a non-Israelite nation or people?"
+            },
+            {
+                "Code": "ForeignerLaw",
+                "Title": "Legal instruction concerning foreigners",
+                "Question": "Does the verse give a command, law, or instruction that specifically addresses how Israel is to treat foreigners or sojourners?"
+            },
+            {
+                "Code": "ForeignerAcknowledgesYahweh",
+                "Title": "Non-Israelite acknowledgment of Yahweh",
+                "Question": "Does a non-Israelite speak of, fear, worship, or acknowledge Yahweh in the verse?"
+            },
+            {
+                "Code": "ForeignerInclusion",
+                "Title": "Inclusion or incorporation of a foreigner",
+                "Question": "Does the verse show a non-Israelite being brought into Israel’s community, worship, or covenant privileges?"
             }
         ],
         "Rpm": 20,
         "RetryDelaySeconds": 30,
-        "ResumeRun": 15
+        "ResumeRun": 18
     }
 }

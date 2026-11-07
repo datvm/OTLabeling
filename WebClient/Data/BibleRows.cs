@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace WebClient.Data;
 
 public sealed class BibleBookRow
@@ -26,11 +28,13 @@ public sealed class BibleChapterRow
 
 public sealed class BibleVerseRow
 {
+    public int Id { get; set; }
     public int Chapter { get; set; }
     public int VerseNumber { get; set; }
     public string Text { get; set; } = "";
     public int AccumulatedVerseNumber { get; set; }
     public List<List<VerseTagRef>> Tags { get; set; } = [];
+    public List<VerseTopicChip> Topics { get; set; } = [];
 }
 
 static class TagText
@@ -73,6 +77,7 @@ public sealed class VerseTagRow
 
 public sealed class TaggedVerseRow
 {
+    public int VerseId { get; set; }
     public int BookId { get; set; }
     public string BookCode { get; set; } = "";
     public string BookName { get; set; } = "";
@@ -80,4 +85,36 @@ public sealed class TaggedVerseRow
     public int VerseNumber { get; set; }
     public string Text { get; set; } = "";
     public List<List<VerseTagRef>> Tags { get; set; } = [];
+    public List<VerseTopicChip> Topics { get; set; } = [];
+}
+
+public sealed class TopicRow
+{
+    public int Id { get; set; }
+    public string Code { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Question { get; set; } = "";
+    public int YesCount { get; set; }
+}
+
+public sealed class VerseTopicChip
+{
+    public string Code { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Question { get; set; } = "";
+    public string Answer { get; set; } = "";
+    public double Probability { get; set; }
+
+    public string Tip =>
+        Question + " (" + Probability.ToString("0.###", CultureInfo.InvariantCulture) + ")";
+}
+
+public sealed class VerseTopicAnswerRow
+{
+    public int VerseId { get; set; }
+    public string Code { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Question { get; set; } = "";
+    public string Answer { get; set; } = "";
+    public double Probability { get; set; }
 }

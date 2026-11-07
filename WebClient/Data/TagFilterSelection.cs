@@ -9,13 +9,15 @@ public sealed class TagFilterSelection
     public string Keyword { get; set; } = "";
     public string TagQuery { get; set; } = "";
     public bool BooksOpen { get; set; }
+    public bool TopicsOpen { get; set; }
     public HashSet<int> BookIds { get; } = [];
     public List<int> TagIds { get; } = [];
     public bool MatchAnyTag { get; set; }
+    public Dictionary<string, string> TopicAnswers { get; } = new(StringComparer.OrdinalIgnoreCase);
     public List<VerseTagRow> SelectedTags { get; private set; } = [];
     public List<VerseTagRow> Suggestions { get; set; } = [];
 
-    public bool HasVerseFilter => BookIds.Count > 0 || TagIds.Count > 0;
+    public bool HasVerseFilter => BookIds.Count > 0 || TagIds.Count > 0 || TopicAnswers.Count > 0;
 
     public bool HasAnyFilter => Keyword.Trim().Length > 0 || HasVerseFilter;
 
@@ -24,8 +26,10 @@ public sealed class TagFilterSelection
         IReadOnlyList<string>? bookCodes,
         IReadOnlyList<int>? tagIds,
         string? tagOperator,
+        IReadOnlyList<string>? topicValues,
         IReadOnlyList<BibleBookRow> books,
-        IReadOnlyDictionary<int, VerseTagRow> tagsById)
+        IReadOnlyDictionary<int, VerseTagRow> tagsById,
+        IReadOnlyList<TopicRow> topics)
     {
         var nextKeyword = keyword?.Trim() ?? "";
         var nextBooks = new HashSet<int>();
@@ -51,11 +55,13 @@ public sealed class TagFilterSelection
         }
 
         var nextAny = string.Equals(tagOperator, "or", StringComparison.OrdinalIgnoreCase);
+        var nextTopics = ReadTopics(topicValues, topics);
         var sameKeyword = string.Equals(Keyword.Trim(), nextKeyword, StringComparison.Ordinal);
         var sameBooks = BookIds.SetEquals(nextBooks);
         var sameTags = TagIds.SequenceEqual(nextTags);
         var sameOperator = MatchAnyTag == nextAny;
-        if (sameKeyword && sameBooks && sameTags && sameOperator)
+        var sameTopics = SameTopics(nextTopics);
+        if (sameKeyword && sameBooks && sameTags && sameOperator && sameTopics)
             return false;
 
         if (!sameKeyword)
@@ -66,11 +72,15 @@ public sealed class TagFilterSelection
         TagIds.Clear();
         TagIds.AddRange(nextTags);
         MatchAnyTag = nextAny;
+        TopicAnswers.Clear();
+        foreach (var (code, answer) in nextTopics)
+            TopicAnswers[code] = answer;
+
         SyncSelected(tagsById);
         return true;
     }
 
-    public string Href(string path, IReadOnlyList<BibleBookRow> books)
+    public string Href(string path, IReadOnlyList<BibleBookRow> books, IReadOnlyList<TopicRow> topics)
     {
         var parts = new List<string>();
         var keyword = Keyword.Trim();
@@ -89,11 +99,17 @@ public sealed class TagFilterSelection
         if (MatchAnyTag)
             parts.Add("op=or");
 
+        foreach (var topic in topics)
+        {
+            if (TopicAnswers.TryGetValue(topic.Code, out var answer))
+                parts.Add("topics=" + Uri.EscapeDataString(topic.Code + ":" + answer));
+        }
+
         return parts.Count == 0 ? path : path + "?" + string.Join("&", parts);
     }
 
-    public bool MatchesLocation(string relative, string path, IReadOnlyList<BibleBookRow> books) =>
-        string.Equals(Decode(relative), Decode(Href(path, books)), StringComparison.OrdinalIgnoreCase);
+    public bool MatchesLocation(string relative, string path, IReadOnlyList<BibleBookRow> books, IReadOnlyList<TopicRow> topics) =>
+        string.Equals(Decode(relative), Decode(Href(path, books, topics)), StringComparison.OrdinalIgnoreCase);
 
     public void SyncSelected(IReadOnlyDictionary<int, VerseTagRow> tagsById)
     {
@@ -128,10 +144,56 @@ public sealed class TagFilterSelection
         TagQuery = "";
         Suggestions = [];
         BooksOpen = false;
+        TopicsOpen = false;
         BookIds.Clear();
         TagIds.Clear();
         MatchAnyTag = false;
+        TopicAnswers.Clear();
         SyncSelected(tagsById);
+    }
+
+    static Dictionary<string, string> ReadTopics(IReadOnlyList<string>? values, IReadOnlyList<TopicRow> topics)
+    {
+        var allowed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var topic in topics)
+            allowed[topic.Code] = topic.Code;
+
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (values is null)
+            return result;
+
+        foreach (var value in values)
+        {
+            var split = value.IndexOf(':');
+            if (split <= 0 || split >= value.Length - 1)
+                continue;
+
+            var code = value[..split];
+            var answer = value[(split + 1)..];
+            if (!allowed.TryGetValue(code, out var stored))
+                continue;
+
+            if (answer is not ("Yes" or "No"))
+                continue;
+
+            result[stored] = answer;
+        }
+
+        return result;
+    }
+
+    bool SameTopics(Dictionary<string, string> next)
+    {
+        if (TopicAnswers.Count != next.Count)
+            return false;
+
+        foreach (var (code, answer) in next)
+        {
+            if (!TopicAnswers.TryGetValue(code, out var current) || current != answer)
+                return false;
+        }
+
+        return true;
     }
 
     bool CanSuggest(VerseTagRow tag, string query, TagIndex index)

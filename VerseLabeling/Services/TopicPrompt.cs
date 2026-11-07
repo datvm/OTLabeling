@@ -10,9 +10,22 @@ static class TopicPrompt
         Do not add people, nations, places, or events that those texts do not mention.
         Each question names one verse in `chapter`.
         Answer that question for that verse.
-        The other verses in `chapter`, and `previous` when it is present, may show who or what that verse refers to.
+        The named verse must state the fact the question asks about.
+        Another verse may identify who or what a word in the named verse refers to.
         That includes a pronoun.
+        Another verse does not supply an action, a speech, a promise, a judgment, or an attitude.
+        A Yes for one question does not make another question Yes.
         A nation, people, or group counts only when `chapter` or `previous` names it.
+        A promise or a blessing is a word from God, or a report of that word.
+        A human offer, agreement, marriage proposal, or wish is not that promise.
+        Hostility, a threat, conflict, or judgment counts only when the named verse states it.
+        An Israelite is a person or group in the line of promise that begins with Abraham in Genesis 12 and continues through Isaac, Jacob, and their descendants.
+        Use Israelite only from Genesis 12 onward.
+        Before Genesis 12, a person or group is not Israelite and not a non-Israelite.
+        Treat Hebrew, children of Israel, house of Jacob, and a similar expression as Israelite when `chapter` or `previous` makes that identification.
+        A non-Israelite is a person or group outside that line.
+        A foreigner is a non-Israelite.
+        A sojourner counts as a foreigner when `chapter` or `previous` places that person outside the Israelite line.
         """;
 
     public static string Key(int verseNumber, int sortOrder) =>

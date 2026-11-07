@@ -1,0 +1,334 @@
+@page "/topics/{Code}"
+@inject LabelingDatabase Db
+@inject TagCatalog Catalog
+@inject TopicCatalog Topics
+@inject NavigationManager Nav
+
+<PageTitle>@(topic?.Title ?? Code)</PageTitle>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger" role="alert">@(error)</div>
+    <a class="btn btn-outline-secondary" href="topics">Back to topics</a>
+}
+else if (topic is null)
+{
+    <p class="text-secondary mb-0">
+        <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading topic...
+    </p>
+}
+else
+{
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="topics">Topics</a></li>
+            <li class="breadcrumb-item active" aria-current="page">@(topic.Title)</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <h1 class="h3 mb-0">@(topic.Title)</h1>
+        <span class="text-secondary">@(topic.Code)</span>
+        @if (verses is not null)
+        {
+            <span class="badge text-bg-secondary">@(verses.Count)</span>
+        }
+    </div>
+    <p class="text-secondary">@(topic.Question)</p>
+
+    <div class="d-flex gap-3 mb-3">
+        @foreach (var choice in AnswerChoices)
+        {
+            var selected = choice;
+            <div class="form-check mb-0">
+                <input class="form-check-input" type="radio" name="topic-answer" id="@($"topic-answer-{selected}")"
+                       checked="@(answer == selected)"
+                       @onchange="@(() => Choose(selected))" />
+                <label class="form-check-label" for="@($"topic-answer-{selected}")">@(selected)</label>
+            </div>
+        }
+    </div>
+
+    @if (verses is null)
+    {
+        <p class="text-secondary mb-0">
+            <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading verses...
+        </p>
+    }
+    else if (verses.Count == 0)
+    {
+        <p class="text-secondary mb-0">No verses are @(answer) for this topic.</p>
+    }
+    else
+    {
+        @if (bookIds.Count > 0)
+        {
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ExpandAll">Expand all</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CollapseAll">Collapse all</button>
+            </div>
+        }
+        <Virtualize Items="@(rows)" Context="row" ItemSize="@(64)" OverscanCount="@(12)">
+            @if (row.Kind == TopicListKind.Book)
+            {
+                <div @key="@(row.Key)" class="d-flex flex-wrap align-items-baseline gap-2 tag-list-book">
+                    <h2 class="h5 mb-0">
+                        <a href="@($"books/{row.BookCode}")">@(row.BookName)</a>
+                    </h2>
+                    <span class="badge text-bg-secondary">@(row.Count)</span>
+                    <ExpandLink Open="@(row.Open)" OnToggle="@(BookToggle(row.BookId))" />
+                </div>
+            }
+            else if (row.Kind == TopicListKind.Chapter)
+            {
+                <div @key="@(row.Key)" class="d-flex flex-wrap align-items-baseline gap-2 py-1">
+                    <a href="@($"books/{row.BookCode}?chapter={row.Chapter}")">Chapter @(row.Chapter)</a>
+                    <span class="badge text-bg-secondary">@(row.Count)</span>
+                    <ExpandLink Open="@(row.Open)" OnToggle="@(ChapterToggle(row.ChapterKey))" />
+                </div>
+            }
+            else if (row.Verse is TaggedVerseRow verse)
+            {
+                <div @key="@(row.Key)">
+                    <VerseRow VerseNumber="@(verse.VerseNumber)" Text="@(verse.Text)" Tags="@(verse.Tags)" Topics="@(verse.Topics)" GroupParents="@(true)" Index="@(Catalog.Index)" TagsById="@(Catalog.TagsById)" />
+                </div>
+            }
+        </Virtualize>
+    }
+}
+
+@code {
+    static readonly string[] AnswerChoices = ["Yes", "No", "Ambiguous"];
+
+    [Parameter]
+    public string Code { get; set; } = "";
+
+    [SupplyParameterFromQuery(Name = "answer")]
+    public string? RequestedAnswer { get; set; }
+
+    TopicRow? topic;
+    List<TaggedVerseRow>? verses;
+    List<TopicListRow> rows = [];
+    List<int> bookIds = [];
+    List<string> chapterKeys = [];
+    HashSet<int> closedBooks = [];
+    HashSet<string> openChapters = [];
+    string? loadedCode;
+    string answer = "Yes";
+    int loadVersion;
+    string? error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (RequestedAnswer is not null && RequestedAnswer is not ("Yes" or "No" or "Ambiguous"))
+        {
+            Nav.NavigateTo($"topics/{Uri.EscapeDataString(Code)}", replace: true);
+            return;
+        }
+
+        var nextAnswer = RequestedAnswer ?? "Yes";
+        if (loadedCode == Code && answer == nextAnswer && topic is not null && error is null)
+            return;
+
+        var version = ++loadVersion;
+        var requestedCode = Code;
+        var sameTopic = loadedCode == requestedCode && topic is not null && error is null;
+        error = null;
+        answer = nextAnswer;
+        verses = null;
+        rows = [];
+        if (!sameTopic)
+            topic = null;
+
+        try
+        {
+            await Catalog.LoadAsync();
+            await Topics.LoadAsync();
+            if (version != loadVersion)
+                return;
+
+            if (!sameTopic)
+            {
+                var row = await Db.GetTopicByCodeAsync(requestedCode);
+                if (version != loadVersion)
+                    return;
+
+                if (row is null)
+                {
+                    error = $"No topic has code {requestedCode}.";
+                    return;
+                }
+
+                topic = row;
+            }
+
+            var verseRows = (await Db.GetVersesForTopicAsync(topic!.Code, answer)).ToList();
+            if (version != loadVersion)
+                return;
+
+            foreach (var verse in verseRows)
+                verse.Topics = Topics.ChipsFor(verse.VerseId).ToList();
+
+            loadedCode = requestedCode;
+            verses = verseRows;
+            closedBooks = [];
+            openChapters = [];
+            RebuildRows();
+        }
+        catch (Exception ex)
+        {
+            if (version != loadVersion)
+                return;
+
+            error = ex.Message;
+        }
+    }
+
+    void Choose(string selected)
+    {
+        if (selected == answer)
+            return;
+
+        var path = "topics/" + Uri.EscapeDataString(Code);
+        Nav.NavigateTo(selected == "Yes" ? path : path + "?answer=" + Uri.EscapeDataString(selected));
+    }
+
+    void RebuildRows()
+    {
+        var next = new List<TopicListRow>();
+        var nextBookIds = new List<int>();
+        var nextChapterKeys = new List<string>();
+        if (verses is not null)
+        {
+            var index = 0;
+            while (index < verses.Count)
+            {
+                var book = verses[index];
+                var bookStart = index;
+                while (index < verses.Count && verses[index].BookId == book.BookId)
+                    index++;
+
+                var bookOpen = !closedBooks.Contains(book.BookId);
+                nextBookIds.Add(book.BookId);
+                next.Add(new TopicListRow
+                {
+                    Kind = TopicListKind.Book,
+                    Key = $"b{book.BookId}",
+                    BookId = book.BookId,
+                    BookCode = book.BookCode,
+                    BookName = book.BookName,
+                    Count = index - bookStart,
+                    Open = bookOpen,
+                });
+
+                var chapterIndex = bookStart;
+                while (chapterIndex < index)
+                {
+                    var chapter = verses[chapterIndex];
+                    var chapterStart = chapterIndex;
+                    while (chapterIndex < index && verses[chapterIndex].Chapter == chapter.Chapter)
+                        chapterIndex++;
+
+                    var chapterKey = $"{book.BookId}:{chapter.Chapter}";
+                    nextChapterKeys.Add(chapterKey);
+                    if (!bookOpen)
+                        continue;
+
+                    var chapterOpen = openChapters.Contains(chapterKey);
+                    next.Add(new TopicListRow
+                    {
+                        Kind = TopicListKind.Chapter,
+                        Key = "c" + chapterKey,
+                        BookId = book.BookId,
+                        BookCode = book.BookCode,
+                        Chapter = chapter.Chapter,
+                        ChapterKey = chapterKey,
+                        Count = chapterIndex - chapterStart,
+                        Open = chapterOpen,
+                    });
+                    if (!chapterOpen)
+                        continue;
+
+                    for (var verseIndex = chapterStart; verseIndex < chapterIndex; verseIndex++)
+                    {
+                        var verse = verses[verseIndex];
+                        next.Add(new TopicListRow
+                        {
+                            Kind = TopicListKind.Verse,
+                            Key = $"v{book.BookId}:{chapter.Chapter}:{verse.VerseNumber}",
+                            Verse = verse,
+                        });
+                    }
+                }
+            }
+        }
+
+        bookIds = nextBookIds;
+        chapterKeys = nextChapterKeys;
+        rows = next;
+    }
+
+    EventCallback BookToggle(int bookId) =>
+        EventCallback.Factory.Create(this, () => ToggleBook(bookId));
+
+    void ToggleBook(int bookId)
+    {
+        if (!closedBooks.Add(bookId))
+            closedBooks.Remove(bookId);
+
+        RebuildRows();
+    }
+
+    EventCallback ChapterToggle(string key) =>
+        EventCallback.Factory.Create(this, () => ToggleChapter(key));
+
+    void ToggleChapter(string key)
+    {
+        if (!openChapters.Add(key))
+            openChapters.Remove(key);
+
+        RebuildRows();
+    }
+
+    void ExpandAll()
+    {
+        foreach (var bookId in bookIds)
+            closedBooks.Remove(bookId);
+
+        openChapters.Clear();
+        foreach (var key in chapterKeys)
+            openChapters.Add(key);
+
+        RebuildRows();
+    }
+
+    void CollapseAll()
+    {
+        foreach (var bookId in bookIds)
+            closedBooks.Add(bookId);
+
+        openChapters.Clear();
+        RebuildRows();
+    }
+
+    enum TopicListKind
+    {
+        Book,
+        Chapter,
+        Verse,
+    }
+
+    sealed class TopicListRow
+    {
+        public TopicListKind Kind { get; init; }
+        public string Key { get; init; } = "";
+        public int BookId { get; init; }
+        public string BookCode { get; init; } = "";
+        public string BookName { get; init; } = "";
+        public int Chapter { get; init; }
+        public string ChapterKey { get; init; } = "";
+        public int Count { get; init; }
+        public bool Open { get; init; }
+        public TaggedVerseRow? Verse { get; init; }
+    }
+}

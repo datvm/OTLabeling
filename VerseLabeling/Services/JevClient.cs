@@ -18,13 +18,18 @@ sealed class JevClient(string apiKey) : IDisposable
         Timeout = TimeSpan.FromMinutes(10),
     };
 
-    public async Task<string> AskAsync(string model, TopicRequest topicRequest)
+    public const string LongContextHeader = "TypeSafe-Danger-Zone-Long-Context";
+
+    public async Task<string> AskAsync(string model, TopicRequest topicRequest, bool longContext)
     {
         var requestJson = JsonSerializer.Serialize(
             new JevRequest(model, topicRequest.State, topicRequest.Questions),
             RequestOptions);
         using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        if (longContext)
+            request.Headers.TryAddWithoutValidation(LongContextHeader, "true");
+
         request.Content = new StringContent(requestJson, Encoding.UTF8, "application/json");
 
         HttpResponseMessage response;
@@ -43,6 +48,14 @@ sealed class JevClient(string apiKey) : IDisposable
             var status = (int)response.StatusCode;
             if (status is 429 or 503 or 529)
                 throw new JevRetryException(status);
+
+            if (status == 400 && body.Contains("max_tokens_exceeded", StringComparison.Ordinal))
+            {
+                if (longContext)
+                    throw new LabelingException("The request exceeds the long context length.");
+
+                throw new JevContextException();
+            }
 
             if (!response.IsSuccessStatusCode)
                 throw new LabelingException("The API call failed: " + Redact(status + " " + Brief(body)));
@@ -75,3 +88,5 @@ sealed class JevRetryException(int status) : Exception
 {
     public int Status { get; } = status;
 }
+
+sealed class JevContextException : Exception;

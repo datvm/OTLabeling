@@ -1,6 +1,7 @@
 ﻿@page "/tags/{Id:int}"
 @inject LabelingDatabase Db
 @inject TagCatalog Catalog
+@inject TopicCatalog Topics
 @inject NavigationManager Navigation
 
 <PageTitle>@(tag?.Label ?? "Tag")</PageTitle>
@@ -8,7 +9,7 @@
 @if (error is not null)
 {
     <div class="alert alert-danger" role="alert">@(error)</div>
-    <a class="btn btn-outline-secondary" href="@(selection.Href("tags", Catalog.Loaded ? Catalog.Books : []))">Back to tags</a>
+    <a class="btn btn-outline-secondary" href="@(selection.Href("tags", Catalog.Loaded ? Catalog.Books : [], Topics.Loaded ? Topics.Topics : []))">Back to tags</a>
 }
 else if (tag is null)
 {
@@ -20,7 +21,7 @@ else
 {
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="@(selection.Href("tags", Catalog.Books))">Tags</a></li>
+            <li class="breadcrumb-item"><a href="@(selection.Href("tags", Catalog.Books, Topics.Topics))">Tags</a></li>
             <li class="breadcrumb-item active" aria-current="page">@(tag.Label)</li>
         </ol>
     </nav>
@@ -43,7 +44,7 @@ else
         </p>
     }
 
-    <TagFilterPanel Selection="@(selection)" Catalog="@(Catalog)" Changed="@(OnFilterChanged)" Cleared="@(OnCleared)" />
+    <TagFilterPanel Selection="@(selection)" Catalog="@(Catalog)" Topics="@(Topics)" Changed="@(OnFilterChanged)" Cleared="@(OnCleared)" />
 
     @if (verses is null)
     {
@@ -86,7 +87,7 @@ else
                 else if (row.Verse is TaggedVerseRow verse)
                 {
                     <div @key="@(row.Key)">
-                        <VerseRow VerseNumber="@(verse.VerseNumber)" Text="@(verse.Text)" Tags="@(verse.Tags)" ActiveTagId="@(tag.Id)" TagLink="@(TagHref)" GroupParents="@(true)" Index="@(Catalog.Index)" TagsById="@(Catalog.TagsById)" />
+                        <VerseRow VerseNumber="@(verse.VerseNumber)" Text="@(verse.Text)" Tags="@(verse.Tags)" Topics="@(verse.Topics)" ActiveTagId="@(tag.Id)" TagLink="@(TagHref)" GroupParents="@(true)" Index="@(Catalog.Index)" TagsById="@(Catalog.TagsById)" />
                     </div>
                 }
         </Virtualize>
@@ -111,6 +112,9 @@ else
     [SupplyParameterFromQuery(Name = "op")]
     public string? OperatorQuery { get; set; }
 
+    [SupplyParameterFromQuery(Name = "topics")]
+    public string[]? TopicQuery { get; set; }
+
     VerseTagRow? tag;
     List<VerseTagRef> parents = [];
     List<TaggedVerseRow>? allVerses;
@@ -130,13 +134,14 @@ else
         try
         {
             await Catalog.LoadAsync();
+            await Topics.LoadAsync();
             var current = RelativeUri();
             var ownNavigation = writtenHref is not null
-                && selection.MatchesLocation(current, PagePath(), Catalog.Books)
-                && selection.MatchesLocation(writtenHref, PagePath(), Catalog.Books);
+                && selection.MatchesLocation(current, PagePath(), Catalog.Books, Topics.Topics)
+                && selection.MatchesLocation(writtenHref, PagePath(), Catalog.Books, Topics.Topics);
             if (!ownNavigation)
             {
-                selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, OperatorQuery, Catalog.Books, Catalog.TagsById);
+                selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, OperatorQuery, TopicQuery, Catalog.Books, Catalog.TagsById, Topics.Topics);
                 writtenHref = current;
             }
 
@@ -184,6 +189,9 @@ else
         if (version != loadVersion)
             return;
 
+        foreach (var verse in verseRows)
+            verse.Topics = Topics.ChipsFor(verse.VerseId).ToList();
+
         loadedId = requestedId;
         tag = row;
         parents = parentRows;
@@ -209,7 +217,7 @@ else
         if (allVerses is null || !Catalog.Loaded)
             return;
 
-        Catalog.Apply(selection.BookIds, selection.TagIds, selection.MatchAnyTag);
+        Catalog.Apply(selection.BookIds, selection.TagIds, selection.MatchAnyTag, Topics.MatchingVerseIds(selection.TopicAnswers));
         verses = allVerses.Where(MatchesFilter).ToList();
         RebuildRows();
     }
@@ -294,6 +302,9 @@ else
         if (selection.BookIds.Count > 0 && !selection.BookIds.Contains(verse.BookId))
             return false;
 
+        if (!Topics.Matches(verse.VerseId, selection.TopicAnswers))
+            return false;
+
         if (selection.TagIds.Count == 0)
             return true;
 
@@ -334,8 +345,8 @@ else
     void SyncUrl()
     {
         var path = PagePath();
-        var href = selection.Href(path, Catalog.Books);
-        if (selection.MatchesLocation(RelativeUri(), path, Catalog.Books))
+        var href = selection.Href(path, Catalog.Books, Topics.Topics);
+        if (selection.MatchesLocation(RelativeUri(), path, Catalog.Books, Topics.Topics))
         {
             writtenHref = href;
             return;
@@ -347,7 +358,7 @@ else
 
     string PagePath() => $"tags/{Id}";
 
-    string TagHref(int id) => selection.Href($"tags/{id}", Catalog.Books);
+    string TagHref(int id) => selection.Href($"tags/{id}", Catalog.Books, Topics.Topics);
 
     string RelativeUri() => Navigation.ToBaseRelativePath(Navigation.Uri);
 

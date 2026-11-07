@@ -121,13 +121,19 @@ sealed class TopicLabeler(LabelingContext database, ConfigProvider config, strin
 
     async Task<string> SendAsync(JevClient jev, string model, TopicRequest request, int retryDelaySeconds)
     {
+        var longContext = false;
         while (true)
         {
             try
             {
-                var body = await jev.AskAsync(model, request);
+                var body = await jev.AskAsync(model, request, longContext);
                 retryStreak = 0;
                 return body;
+            }
+            catch (JevContextException) when (!longContext)
+            {
+                longContext = true;
+                Console.WriteLine("The request exceeds the context length. The next attempt uses long context.");
             }
             catch (JevRetryException ex)
             {

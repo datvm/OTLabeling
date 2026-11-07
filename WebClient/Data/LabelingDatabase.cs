@@ -52,7 +52,7 @@ public sealed class LabelingDatabase(IJSRuntime js)
     {
         var verses = await QueryAsync<BibleVerseRow>(
             """
-            SELECT Chapter, VerseNumber, Text, AccumulatedVerseNumber
+            SELECT Id, Chapter, VerseNumber, Text, AccumulatedVerseNumber
             FROM BibleVerses
             WHERE BookId = ?
             ORDER BY Chapter, VerseNumber
@@ -66,7 +66,7 @@ public sealed class LabelingDatabase(IJSRuntime js)
     {
         var verses = await QueryAsync<BibleVerseRow>(
             """
-            SELECT Chapter, VerseNumber, Text, AccumulatedVerseNumber
+            SELECT Id, Chapter, VerseNumber, Text, AccumulatedVerseNumber
             FROM BibleVerses
             WHERE BookId = ? AND Chapter = ?
             ORDER BY VerseNumber
@@ -181,6 +181,7 @@ public sealed class LabelingDatabase(IJSRuntime js)
             var first = group.First();
             verses.Add(new TaggedVerseRow
             {
+                VerseId = first.VerseId,
                 BookId = first.BookId,
                 BookCode = first.BookCode,
                 BookName = first.BookName,
@@ -195,6 +196,99 @@ public sealed class LabelingDatabase(IJSRuntime js)
                         Subclassifier = row.TagSubclassifier,
                     }).ToList(),
                     parents),
+            });
+        }
+
+        return verses;
+    }
+
+    public Task<IReadOnlyList<TopicRow>> GetTopicsAsync()
+        => QueryAsync<TopicRow>(
+            """
+            SELECT t.Id, t.Code, t.Title, t.Question,
+                   CAST(SUM(CASE WHEN a.Answer = 'Yes' THEN 1 ELSE 0 END) AS INTEGER) AS YesCount
+            FROM Topics t
+            LEFT JOIN VerseTopicAnswers a ON a.Code = t.Code
+            GROUP BY t.Id, t.Code, t.Title, t.Question
+            ORDER BY t.Id
+            """);
+
+    public async Task<TopicRow?> GetTopicByCodeAsync(string code)
+    {
+        var rows = await QueryAsync<TopicRow>(
+            """
+            SELECT t.Id, t.Code, t.Title, t.Question,
+                   CAST(SUM(CASE WHEN a.Answer = 'Yes' THEN 1 ELSE 0 END) AS INTEGER) AS YesCount
+            FROM Topics t
+            LEFT JOIN VerseTopicAnswers a ON a.Code = t.Code
+            WHERE t.Code = ?
+            GROUP BY t.Id, t.Code, t.Title, t.Question
+            """,
+            code);
+        return rows.FirstOrDefault();
+    }
+
+    public Task<IReadOnlyList<VerseTopicAnswerRow>> GetVerseTopicAnswersAsync()
+        => QueryAsync<VerseTopicAnswerRow>(
+            """
+            SELECT a.VerseId, t.Code, t.Title, t.Question, a.Answer,
+                   CAST(a.Probability AS REAL) AS Probability
+            FROM VerseTopicAnswers a
+            INNER JOIN Topics t ON t.Code = a.Code
+            ORDER BY a.VerseId, t.Id
+            """);
+
+    public async Task<IReadOnlyList<TaggedVerseRow>> GetVersesForTopicAsync(string code, string answer)
+    {
+        var rows = await QueryAsync<TopicVerseLinkRow>(
+            """
+            SELECT b.Id AS BookId, b.Code AS BookCode, b.Name AS BookName,
+                   v.Id AS VerseId, v.Chapter, v.VerseNumber, v.Text,
+                   t.Id AS TagId, t.Name AS TagName, t.Subclassifier AS TagSubclassifier
+            FROM VerseTopicAnswers a
+            INNER JOIN Topics topic ON topic.Code = a.Code
+            INNER JOIN BibleVerses v ON v.Id = a.VerseId
+            INNER JOIN BibleBooks b ON b.Id = v.BookId
+            INNER JOIN BookOrderItems i ON i.BookId = b.Id
+            INNER JOIN BookOrders o ON o.Id = i.BookOrderId
+            LEFT JOIN VerseTagMappings m ON m.VerseId = v.Id
+            LEFT JOIN VerseTags t ON t.Id = m.VerseTagId
+            WHERE o.Code = ? AND topic.Code = ? AND a.Answer = ?
+            ORDER BY i."Order", v.Chapter, v.VerseNumber, m.TagIndex
+            """,
+            DefaultBookOrderCode,
+            code,
+            answer);
+
+        var parents = await ParentIdsByChildAsync();
+        var verses = new List<TaggedVerseRow>();
+        foreach (var group in rows.GroupBy(row => row.VerseId))
+        {
+            var first = group.First();
+            var tags = new List<VerseTagRef>();
+            foreach (var row in group)
+            {
+                if (row.TagId is not int tagId || row.TagName is null)
+                    continue;
+
+                tags.Add(new VerseTagRef
+                {
+                    Id = tagId,
+                    Name = row.TagName,
+                    Subclassifier = row.TagSubclassifier ?? "",
+                });
+            }
+
+            verses.Add(new TaggedVerseRow
+            {
+                VerseId = first.VerseId,
+                BookId = first.BookId,
+                BookCode = first.BookCode,
+                BookName = first.BookName,
+                Chapter = first.Chapter,
+                VerseNumber = first.VerseNumber,
+                Text = first.Text,
+                Tags = OrganizeTags(tags, parents),
             });
         }
 
@@ -236,6 +330,20 @@ public sealed class LabelingDatabase(IJSRuntime js)
         public int Id { get; set; }
         public string Name { get; set; } = "";
         public string Subclassifier { get; set; } = "";
+    }
+
+    sealed class TopicVerseLinkRow
+    {
+        public int BookId { get; set; }
+        public string BookCode { get; set; } = "";
+        public string BookName { get; set; } = "";
+        public int VerseId { get; set; }
+        public int Chapter { get; set; }
+        public int VerseNumber { get; set; }
+        public string Text { get; set; } = "";
+        public int? TagId { get; set; }
+        public string? TagName { get; set; }
+        public string? TagSubclassifier { get; set; }
     }
 
     sealed class TaggedVerseLinkRow

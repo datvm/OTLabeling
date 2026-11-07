@@ -1,5 +1,6 @@
 ﻿@page "/books/{Code}"
 @inject LabelingDatabase Db
+@inject TopicCatalog Topics
 @inject NavigationManager Nav
 
 <PageTitle>@(book?.Name ?? Code)</PageTitle>
@@ -76,7 +77,7 @@ else
             <div class="list-group">
                 @foreach (var verse in group)
                 {
-                    <VerseRow VerseNumber="@(verse.VerseNumber)" Text="@(verse.Text)" Tags="@(verse.Tags)" />
+                    <VerseRow VerseNumber="@(verse.VerseNumber)" Text="@(verse.Text)" Tags="@(verse.Tags)" Topics="@(verse.Topics)" />
                 }
             </div>
         }
@@ -157,9 +158,14 @@ else
         if (book is null)
             return;
 
+        await Topics.LoadAsync();
         var rows = chapter is int number
             ? await Db.GetVersesAsync(book.Id, number)
             : await Db.GetVersesAsync(book.Id);
-        verses = rows.ToList();
+        var list = rows.ToList();
+        foreach (var verse in list)
+            verse.Topics = Topics.ChipsFor(verse.Id).ToList();
+
+        verses = list;
     }
 }

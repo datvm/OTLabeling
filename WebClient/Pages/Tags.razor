@@ -1,5 +1,6 @@
 @page "/tags"
 @inject TagCatalog Catalog
+@inject TopicCatalog Topics
 @inject NavigationManager Navigation
 
 <PageTitle>Tags</PageTitle>
@@ -25,7 +26,7 @@ else if (Catalog.Tags.Count == 0)
 }
 else
 {
-    <TagFilterPanel Selection="@(selection)" Catalog="@(Catalog)" Changed="@(OnFilterChanged)" Cleared="@(OnCleared)" />
+    <TagFilterPanel Selection="@(selection)" Catalog="@(Catalog)" Topics="@(Topics)" Changed="@(OnFilterChanged)" Cleared="@(OnCleared)" />
 
     @if (selection.HasVerseFilter)
     {
@@ -80,12 +81,16 @@ else
     [SupplyParameterFromQuery(Name = "op")]
     public string? OperatorQuery { get; set; }
 
+    [SupplyParameterFromQuery(Name = "topics")]
+    public string[]? TopicQuery { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
             await Catalog.LoadAsync();
-            selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, OperatorQuery, Catalog.Books, Catalog.TagsById);
+            await Topics.LoadAsync();
+            selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, OperatorQuery, TopicQuery, Catalog.Books, Catalog.TagsById, Topics.Topics);
             writtenHref = RelativeUri();
             Apply();
             ready = true;
@@ -102,12 +107,12 @@ else
             return;
 
         var current = RelativeUri();
-        if (writtenHref is not null && selection.MatchesLocation(current, "tags", Catalog.Books)
-            && selection.MatchesLocation(writtenHref, "tags", Catalog.Books))
+        if (writtenHref is not null && selection.MatchesLocation(current, "tags", Catalog.Books, Topics.Topics)
+            && selection.MatchesLocation(writtenHref, "tags", Catalog.Books, Topics.Topics))
             return;
 
         writtenHref = current;
-        if (!selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, OperatorQuery, Catalog.Books, Catalog.TagsById))
+        if (!selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, OperatorQuery, TopicQuery, Catalog.Books, Catalog.TagsById, Topics.Topics))
             return;
 
         Apply();
@@ -129,15 +134,15 @@ else
 
     void Apply()
     {
-        Catalog.Apply(selection.BookIds, selection.TagIds, selection.MatchAnyTag);
+        Catalog.Apply(selection.BookIds, selection.TagIds, selection.MatchAnyTag, Topics.MatchingVerseIds(selection.TopicAnswers));
         selection.SyncSelected(Catalog.TagsById);
         RebuildTree();
     }
 
     void SyncUrl()
     {
-        var href = selection.Href("tags", Catalog.Books);
-        if (selection.MatchesLocation(RelativeUri(), "tags", Catalog.Books))
+        var href = selection.Href("tags", Catalog.Books, Topics.Topics);
+        if (selection.MatchesLocation(RelativeUri(), "tags", Catalog.Books, Topics.Topics))
         {
             writtenHref = href;
             return;
@@ -147,7 +152,7 @@ else
         Navigation.NavigateTo(href, replace: true);
     }
 
-    string TagHref(int id) => selection.Href($"tags/{id}", Catalog.Books);
+    string TagHref(int id) => selection.Href($"tags/{id}", Catalog.Books, Topics.Topics);
 
     string RelativeUri() => Navigation.ToBaseRelativePath(Navigation.Uri);
 
@@ -190,7 +195,7 @@ else
             .ToList();
         panelPaths = [];
         CollectPaths(roots, "");
-        if (term.Length > 0 || selection.TagIds.Count > 0)
+        if (term.Length > 0 || selection.TagIds.Count > 0 || selection.TopicAnswers.Count > 0)
         {
             foreach (var path in panelPaths)
                 openPaths.Add(path);
