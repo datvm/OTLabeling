@@ -36,10 +36,12 @@ static class ChapterPrompt
         The person Israel is People.Israelite.Israel. Stop there when the text names no further person.
         The children of People are Antediluvian, Pre-Israelite, Israelite, Non-Israelite, and Others.
         A person or a people is not a direct step under People.
-        People.Others has no further step.
+        A named person under Others continues, such as People.Others.Job.
+        Stop at People.Others when the text names no person.
         The children of Places are Israel, Non-Israel, and Others.
         A place is not a direct step under Places.
-        Places.Others has no further step.
+        A named place under Others continues under Places.Others.
+        Stop at Places.Others when the text names no place.
         A name of God is a step under God, such as God.LORD, God.Lord God, or God.LORD of Hosts.
         Do not put God, or a name of God, under People.
         Israel the person is People.Israelite.Israel.
@@ -53,6 +55,8 @@ static class ChapterPrompt
         Leave the Subclassifier off.
         A Subclassifier is minimal, and only when absolutely necessary.
         It is necessary only when this chapter has two different people or places that would otherwise have the same path.
+        Put a Subclassifier on both of those paths.
+        Do not leave one copy of that name bare.
         A title, a description, or a poetic phrase is not a reason to add one.
         A wife, son, family, or other companion is not a Subclassifier.
         That person or group gets its own tag name.
@@ -94,14 +98,16 @@ static class ChapterPrompt
         When the text does not name a people, stop at People.Non-Israelite.
         Non-Israelite is the people tag. Non-Israel is the place tag. They are different tags.
 
-        Pre-Israelite is a person or group in the text before Genesis 12.
-        Use Pre-Israelite only in Genesis chapters 1 through 11.
-        Do not use Pre-Israelite from Genesis 12 onward.
+        Pre-Israelite is a person or group from before Genesis 12.
+        A later chapter uses Pre-Israelite when it names that person or group.
         When the verse names a person or a people, the path continues under Pre-Israelite.
         Example: People.Pre-Israelite.Japheth.
         Do not use Israelite or Non-Israelite for that person or people.
 
-        People.Others is a group that the supplied chapter, SummarySoFar, and ImmediateContext never name and never place.
+        People.Others is the category for a person or group that is not Antediluvian, Pre-Israelite, Israelite, or Non-Israelite.
+        When the verse names that person, the path continues under People.Others.
+        Example: People.Others.Job.
+        People.Others with no further step is a group that the supplied chapter, SummarySoFar, and ImmediateContext never name and never place.
         From Genesis 12 onward, the verse lists People.Others and People.Non-Israelite when that group is outside the Israelite line.
         Before Genesis 12, the verse lists People.Others and People.Pre-Israelite.
         A place of origin is enough. Do not use People.Others when the supplied text says where the group is from.
@@ -152,6 +158,8 @@ static class ChapterPrompt
         Non-Israel is a place outside the Promised Land Joshua entered, and every place before that land is given to Joshua.
         This includes the land the spies enter.
         Places.Others is a place that is unknown, not classifiable, or irrelevant.
+        When the verse names that place, the path continues under Places.Others.
+        When the text names no place, stop at Places.Others.
         A named place continues under the nearer place when the supplied text gives one.
         The verse lists the most specific path.
         Example: in Genesis 47, Goshen is inside Egypt, and the land has not been given to Joshua.

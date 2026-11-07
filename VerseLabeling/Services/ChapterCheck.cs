@@ -117,13 +117,6 @@ static class ChapterCheck
         {
             if (beforeIsrael && (name == "Israelite" || name == "Non-Israelite"))
                 errors.Add($"{name} appears before Genesis 12.");
-
-            if (!beforeIsrael && name == "Pre-Israelite")
-            {
-                errors.Add(bookCode.Equals("GEN", StringComparison.OrdinalIgnoreCase)
-                    ? "Pre-Israelite appears from Genesis 12 onward."
-                    : "Pre-Israelite appears outside Genesis 1-11.");
-            }
         }
 
         if (output.Verses is null)

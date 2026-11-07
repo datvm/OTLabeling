@@ -17,7 +17,7 @@ Use these names with the same meaning in every step.
 - Verse tag: a named mark on a verse. One verse can have many verse tags.
 - Parent tag: a verse tag above another verse tag. A verse tag has no parents, or one or more parents.
 - Root tag: People, God, or Places.
-- People tag: Antediluvian, Pre-Israelite, Israelite, Non-Israelite, or Others. People is its only parent.
+- People tag: Antediluvian, Pre-Israelite, Israelite, Non-Israelite, or Others. People is its only parent. A named person may hang under one of those, including Others.
 - God tag: a name or title of God. God is its parent.
 - Place tag: Israel, Non-Israel, or Others. Places is its only parent. A named place hangs under one of those. Israel the person hangs under Israelite.
 - SummarySoFar: the summary of this book through the chapter that wrote it.
@@ -115,7 +115,7 @@ A response that is not 429 or 503 sets that count and that wait back to the star
 Any other API failure fails immediately.
 A verse tag path check is retried.
 A missing verse or an empty summary still stops the run.
-Using Pre-Israelite, Israelite, or Non-Israelite in the wrong chapters is retried.
+Using Israelite or Non-Israelite before Genesis 12 is retried.
 The program sends the original input, that response, and the check error.
 It asks for a full JSON response.
 The message list keeps every question and every response in that chapter.
@@ -384,6 +384,8 @@ The program stores the last step as `Name`.
 The program stores a parent from the previous step.
 A Subclassifier is minimal, and only when absolutely necessary.
 It is necessary only when two people or places in the chapter would otherwise have the same path.
+Put a Subclassifier on both of those paths.
+Do not leave one copy of that name bare.
 The phrase is the shortest words that tell the two apart, at most 40 characters.
 A fixed step has no classifier.
 The fixed steps are People, God, Places, Antediluvian, Pre-Israelite, Israelite, Non-Israelite, Others, Israel, and Non-Israel.

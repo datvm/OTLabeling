@@ -112,6 +112,7 @@ A path starts with People, God, or Places.
 A dot separates each step.
 EXAMPLE: `People.Non-Israelite.Moabite`.
 EXAMPLE: `People.Others`.
+EXAMPLE: `People.Others.Job`.
 EXAMPLE: `Places.Non-Israel.Egypt.Goshen`.
 The response does not include a tag catalog.
 A root is a whole path only when that root has no fixed children.
@@ -124,10 +125,16 @@ The program ignores any other JSON property.
 The root tags are People and Places.
 The people tags are Antediluvian, Pre-Israelite, Israelite, Non-Israelite, and Others.
 People is the only parent of each people tag.
+Pre-Israelite is a person or group from before Genesis 12.
+A later chapter may use Pre-Israelite when it names that person or group.
+The check allows that tag outside Genesis 1-11.
 God is a root tag.
 The place tags are Israel, Non-Israel, and Others.
 Places is the only parent of each place tag.
 The people tag Others and the place tag Others are different tags.
+A named person continues under People.Others, such as People.Others.Job.
+A named place continues under Places.Others.
+Stop at Others when the text names nothing further.
 Do not use Everyone.
 Do not use Unknown. Use Others.
 The check fails when a fixed tag differs from one of these names only by letter case.
@@ -146,6 +153,8 @@ Two paths that differ only by capital letters are one tag on that verse.
 The first copy keeps its place.
 A Subclassifier is minimal, and only when absolutely necessary.
 It is necessary only when two people or places in the chapter would otherwise have the same path.
+Put a Subclassifier on both of those paths.
+Do not leave one copy of that name bare.
 The phrase is the shortest words that tell the two apart.
 A title, a description, or a poetic phrase is not a reason to add one.
 A wife, son, family, or other companion is a separate tag.
@@ -166,13 +175,13 @@ The check fails in these cases:
 - A verse tag is not a path.
 - A path does not start with People, God, or Places.
 - A free-form name is a direct step under People or Places.
-- A path adds a child under Others.
 - A locked step has a classifier. The locked steps are People, God, Places, Antediluvian, Pre-Israelite, Israelite, Non-Israelite, Others, Israel, and Non-Israel.
 - A classifier is longer than 40 characters.
 - Two paths end with the same name, share a root, and have no classifier.
+- One path has a Subclassifier and another path with the same names has none. The error says to put a Subclassifier on both when they are two people or places, or to give a companion its own tag name, such as Noah's wife.
 - The tag name is Everyone or Unknown.
 - Israelite or Non-Israelite appears before Genesis 12.
-- Pre-Israelite appears outside Genesis 1-11.
+- A fixed name is in the wrong place. The error names the path to use instead. `People.Israelite.Israel.King` says that Israel stops at `People.Israelite.Israel` and that King is `People.Israelite.King`.
 - `SummarySoFar` has no words.
 - `ImmediateContext` has no words.
 
@@ -266,7 +275,7 @@ JSONL keeps commas and line breaks inside the two texts.
 The program writes `raw/{bookCode}-{chapter}.txt` for every response body.
 The program asks again, up to 3 times, when a verse tag path fails the check.
 A missing verse or an empty summary still stops the run.
-Using Pre-Israelite, Israelite, or Non-Israelite in the wrong chapters is retried.
+Using Israelite or Non-Israelite before Genesis 12 is retried.
 That request includes the original input, the response, and the check error.
 The message list keeps the earlier questions and responses.
 The program also writes `raw/{bookCode}-{chapter}-{attempt}.txt` for each of those bodies.

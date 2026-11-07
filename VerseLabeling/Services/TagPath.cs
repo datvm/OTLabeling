@@ -210,7 +210,7 @@ sealed class TagPathSet
             {
                 if (ChapterCheck.IsLockedName(segments[index].Name))
                 {
-                    errors.Add($"{label} uses {segments[index].Name} in the wrong place.");
+                    errors.Add(WrongPlace(label, segments[index].Name, NextName(segments, index)));
                     return false;
                 }
             }
@@ -234,15 +234,9 @@ sealed class TagPathSet
             return false;
         }
 
-        if (bucket == "Others" && segments.Count > 2)
-        {
-            errors.Add($"{label} adds a child under Others.");
-            return false;
-        }
-
         if (bucket == "Israel" && segments.Count > 2 && segments.Skip(2).Any(segment => segment.Name == "Israel"))
         {
-            errors.Add($"{label} uses Israel in the wrong place.");
+            errors.Add(WrongPlace(label, "Israel", null));
             return false;
         }
 
@@ -254,7 +248,7 @@ sealed class TagPathSet
             {
                 if (segments.Count > 3)
                 {
-                    errors.Add($"{label} uses Israel in the wrong place.");
+                    errors.Add(WrongPlace(label, "Israel", segments[3].Name));
                     return false;
                 }
 
@@ -263,12 +257,41 @@ sealed class TagPathSet
 
             if (ChapterCheck.IsLockedName(name) || ChapterCheck.IsRoot(name))
             {
-                errors.Add($"{label} uses {name} in the wrong place.");
+                errors.Add(WrongPlace(label, name, NextName(segments, index)));
                 return false;
             }
         }
 
         return FreeSteps(segments, 2, label, errors);
+    }
+
+    static string? NextName(List<Segment> segments, int index) =>
+        index + 1 < segments.Count ? segments[index + 1].Name : null;
+
+    static string WrongPlace(string label, string name, string? next)
+    {
+        if (name == "Israel")
+        {
+            var stop = "Israel the person is People.Israelite.Israel and that path stops there. Israel the land is Places.Israel.";
+            if (next is null)
+                return $"{label} uses Israel in the wrong place. {stop}";
+
+            return $"{label} uses Israel in the wrong place. {stop} Put {next} under People.Israelite, as People.Israelite.{next}.";
+        }
+
+        if (name == "God")
+            return $"{label} uses God in the wrong place. A name of God is one step under God, such as God.LORD.";
+
+        if (name is "People" or "Places")
+            return $"{label} uses {name} in the wrong place. {name} starts its own path.";
+
+        if (ChapterCheck.FixedParent.TryGetValue(name, out var parent) && parent is not null)
+            return $"{label} uses {name} in the wrong place. Use {parent}.{name}.";
+
+        if (name == "Others")
+            return $"{label} uses Others in the wrong place. Others is a child of People or Places. A further name continues under it, such as People.Others.Job.";
+
+        return $"{label} uses {name} in the wrong place.";
     }
 
     static bool FreeSteps(List<Segment> segments, int start, string label, List<string> errors)
@@ -277,7 +300,7 @@ sealed class TagPathSet
         {
             if (segments[index].Name is "People" or "God" or "Places")
             {
-                errors.Add($"{label} uses {segments[index].Name} in the wrong place.");
+                errors.Add(WrongPlace(label, segments[index].Name, null));
                 return false;
             }
         }
@@ -296,12 +319,18 @@ sealed class TagPathSet
                 continue;
 
             var name = group.First().Segments[^1].Name;
+            var bare = string.Join(
+                ", ",
+                group
+                    .Where(item => item.Segments[^1].Subclassifier.Length == 0)
+                    .Select(item => item.Text)
+                    .Distinct(StringComparer.OrdinalIgnoreCase));
             foreach (var text in group
                 .Where(item => item.Segments[^1].Subclassifier.Length > 0)
                 .Select(item => item.Text)
                 .Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                Errors.Add($"Tag '{text}' is not a second {name}. Give that person or group its own tag name, such as {name}'s wife.");
+                Errors.Add($"Tag '{text}' sits beside {bare}. Two different people or places named {name} each need a Subclassifier. Add one to {bare} as well. A wife, son, family, or other companion is not a second {name}. Give that companion its own tag name, such as {name}'s wife.");
             }
         }
     }

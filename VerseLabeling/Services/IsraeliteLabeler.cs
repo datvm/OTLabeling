@@ -184,9 +184,7 @@ sealed class IsraeliteLabeler(
         if (error.StartsWith("Tag '", StringComparison.Ordinal))
             return true;
 
-        return error.EndsWith(" appears before Genesis 12.", StringComparison.Ordinal)
-            || error is "Pre-Israelite appears from Genesis 12 onward."
-                or "Pre-Israelite appears outside Genesis 1-11.";
+        return error.EndsWith(" appears before Genesis 12.", StringComparison.Ordinal);
     }
 
     static string CheckRetryMessage(string originalInput, string response, IReadOnlyList<string> errors)
@@ -204,13 +202,15 @@ sealed class IsraeliteLabeler(
             "Israel the person is People.Israelite.Israel. Israel the land is Places.Israel.",
             "Leave the Subclassifier off. A Subclassifier is minimal, and only when absolutely necessary.",
             "It is necessary only when this chapter has two different people or places that would otherwise have the same path.",
+            "Put a Subclassifier on both of those paths. Do not leave one copy of that name bare.",
             "A title, a description, or a poetic phrase is not a reason to add one.",
             "A wife, son, family, or other companion is a separate tag. Noah's wife is People.Antediluvian.Noah's wife, not Noah (wife).",
             "A root is a whole path only when it has no fixed children. God is God, not God.God.",
             "People and Places have fixed children. Do not use them alone. Use a leaf, such as People.Israelite or People.Others.",
+            "A named person under Others continues, such as People.Others.Job.",
             "Do not repeat a step. The land is Places.Israel, not Israel.Israel.",
             "Do not put a Subclassifier on People, God, Places, Antediluvian, Pre-Israelite, Israelite, Non-Israelite, Others, Israel, or Non-Israel.",
-            "Pre-Israelite is only Genesis 1 through 11. From Genesis 12 onward, use People.Israelite or People.Non-Israelite.",
+            "A person from before Genesis 12 stays Pre-Israelite when a later chapter names that person.",
         };
 
         lines.Add("");
