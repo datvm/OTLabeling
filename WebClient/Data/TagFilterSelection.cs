@@ -11,6 +11,7 @@ public sealed class TagFilterSelection
     public bool BooksOpen { get; set; }
     public HashSet<int> BookIds { get; } = [];
     public List<int> TagIds { get; } = [];
+    public bool MatchAnyTag { get; set; }
     public List<VerseTagRow> SelectedTags { get; private set; } = [];
     public List<VerseTagRow> Suggestions { get; set; } = [];
 
@@ -22,6 +23,7 @@ public sealed class TagFilterSelection
         string? keyword,
         IReadOnlyList<string>? bookCodes,
         IReadOnlyList<int>? tagIds,
+        string? tagOperator,
         IReadOnlyList<BibleBookRow> books,
         IReadOnlyDictionary<int, VerseTagRow> tagsById)
     {
@@ -48,10 +50,12 @@ public sealed class TagFilterSelection
             }
         }
 
+        var nextAny = string.Equals(tagOperator, "or", StringComparison.OrdinalIgnoreCase);
         var sameKeyword = string.Equals(Keyword.Trim(), nextKeyword, StringComparison.Ordinal);
         var sameBooks = BookIds.SetEquals(nextBooks);
         var sameTags = TagIds.SequenceEqual(nextTags);
-        if (sameKeyword && sameBooks && sameTags)
+        var sameOperator = MatchAnyTag == nextAny;
+        if (sameKeyword && sameBooks && sameTags && sameOperator)
             return false;
 
         if (!sameKeyword)
@@ -61,6 +65,7 @@ public sealed class TagFilterSelection
         BookIds.UnionWith(nextBooks);
         TagIds.Clear();
         TagIds.AddRange(nextTags);
+        MatchAnyTag = nextAny;
         SyncSelected(tagsById);
         return true;
     }
@@ -80,6 +85,9 @@ public sealed class TagFilterSelection
 
         foreach (var id in TagIds)
             parts.Add("tags=" + id.ToString(CultureInfo.InvariantCulture));
+
+        if (MatchAnyTag)
+            parts.Add("op=or");
 
         return parts.Count == 0 ? path : path + "?" + string.Join("&", parts);
     }
@@ -122,6 +130,7 @@ public sealed class TagFilterSelection
         BooksOpen = false;
         BookIds.Clear();
         TagIds.Clear();
+        MatchAnyTag = false;
         SyncSelected(tagsById);
     }
 

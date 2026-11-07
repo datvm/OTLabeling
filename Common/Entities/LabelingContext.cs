@@ -13,7 +13,12 @@ public class LabelingContext(DbContextOptions<LabelingContext> options) : DbCont
     public DbSet<VerseTagMapping> VerseTagMappings { get; set; }
     public DbSet<LabelRun> LabelRuns { get; set; }
     public DbSet<LabelRunChapter> LabelRunChapters { get; set; }
+    public DbSet<ChapterContext> ChapterContexts { get; set; }
     public DbSet<LabelRunTag> LabelRunTags { get; set; }
+    public DbSet<Topic> Topics { get; set; }
+    public DbSet<LabelRunTopic> LabelRunTopics { get; set; }
+    public DbSet<LabelRunTopicAnswer> LabelRunTopicAnswers { get; set; }
+    public DbSet<VerseTopicAnswer> VerseTopicAnswers { get; set; }
     public DbSet<VerseTagResolution> VerseTagResolutions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -49,6 +54,16 @@ public class LabelingContext(DbContextOptions<LabelingContext> options) : DbCont
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<ChapterContext>(entity =>
+        {
+            entity.HasOne<BibleBook>()
+                .WithMany()
+                .HasForeignKey(row => row.BookId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Property(row => row.SummarySoFar).HasDefaultValue("");
+            entity.Property(row => row.ImmediateContext).HasDefaultValue("");
+        });
+
         modelBuilder.Entity<LabelRunChapter>(entity =>
         {
             entity.HasOne<LabelRun>()
@@ -77,6 +92,55 @@ public class LabelingContext(DbContextOptions<LabelingContext> options) : DbCont
                 .WithMany()
                 .HasForeignKey(tag => tag.VerseTagId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Topic>(entity =>
+        {
+            entity.Property(topic => topic.Code).UseCollation("NOCASE");
+        });
+
+        modelBuilder.Entity<LabelRunTopic>(entity =>
+        {
+            entity.HasOne<LabelRun>()
+                .WithMany()
+                .HasForeignKey(topic => topic.LabelRunId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Property(topic => topic.Code).UseCollation("NOCASE");
+        });
+
+        modelBuilder.Entity<LabelRunTopicAnswer>(entity =>
+        {
+            entity.HasOne<LabelRun>()
+                .WithMany()
+                .HasForeignKey(answer => answer.LabelRunId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<BibleVerse>()
+                .WithMany()
+                .HasForeignKey(answer => answer.VerseId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<LabelRunTopic>()
+                .WithMany()
+                .HasForeignKey(answer => answer.LabelRunTopicId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_LabelRunTopicAnswer_Answer",
+                "[Answer] IN ('Yes', 'No', 'Ambiguous')"));
+        });
+
+        modelBuilder.Entity<VerseTopicAnswer>(entity =>
+        {
+            entity.HasOne<BibleVerse>()
+                .WithMany()
+                .HasForeignKey(answer => answer.VerseId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<LabelRun>()
+                .WithMany()
+                .HasForeignKey(answer => answer.LabelRunId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Property(answer => answer.Code).UseCollation("NOCASE");
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_VerseTopicAnswer_Answer",
+                "[Answer] IN ('Yes', 'No', 'Ambiguous')"));
         });
 
         modelBuilder.Entity<VerseTagResolution>(entity =>

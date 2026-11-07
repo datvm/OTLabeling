@@ -27,6 +27,17 @@ static async Task RunAsync()
             return;
         }
 
+        if (step == TopicLabeler.StepName)
+        {
+            var topicSettings = TopicSettings.Read(config.AppConfig);
+            var jevKey = ApiKeyReader.ReadJev();
+            await using var topicScope = provider.CreateAsyncScope();
+            var topicDatabase = topicScope.ServiceProvider.GetRequiredService<LabelingContext>();
+            var topics = new TopicLabeler(topicDatabase, config, jevKey);
+            await topics.RunAsync(topicSettings);
+            return;
+        }
+
         var settings = RunSettings.Read(config.AppConfig);
         apiKey = ApiKeyReader.Read();
 

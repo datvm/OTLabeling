@@ -42,9 +42,11 @@ The first request of the run uses those config values.
 When a value is missing, that field in the first request is the text `None`.
 A blank value also means the text `None`.
 
-The next request in the same book uses the previous output in this run.
-The program copies the previous SummarySoFar output into that request.
-The program copies the previous ImmediateContext output into that request.
+The next chapter in the same book uses the stored context of the previous chapter number.
+`Design.MD` defines `ChapterContext`.
+The program copies that SummarySoFar into the request.
+The program copies that ImmediateContext into the request.
+When this process just labeled that previous chapter, the program uses that output.
 
 The model writes a new SummarySoFar.
 That text covers the book through the current chapter.
@@ -62,8 +64,9 @@ The count of chapters in that example is not a rule.
 The model chooses what to keep.
 The program does not select a fixed chapter count.
 
-The first request of each later book uses the text `None` for SummarySoFar.
-The first request of each later book uses the text `None` for ImmediateContext.
+When the previous chapter has no stored context, the first request of the run uses the config values.
+Every other request with no stored context uses the text `None`.
+Chapter 1 of a book has no previous chapter.
 The program does not copy SummarySoFar from the previous book.
 The program does not copy ImmediateContext from the previous book.
 

@@ -57,44 +57,39 @@ else
     }
     else
     {
-        @if (chapterKeys.Count > 0)
+        @if (bookIds.Count > 0)
         {
             <div class="d-flex flex-wrap gap-2 mb-3">
                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ExpandAll">Expand all</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CollapseAll">Collapse all</button>
             </div>
         }
-        @foreach (var bookGroup in verses.GroupBy(verse => verse.BookId))
-        {
-            var book = bookGroup.First();
-            var bookCode = book.BookCode;
-            var bookName = book.BookName;
-            var bookId = book.BookId;
-            <h2 class="h5 mt-4">
-                <a href="@($"books/{bookCode}")">@(bookName)</a>
-            </h2>
-            @foreach (var chapterGroup in bookGroup.GroupBy(verse => verse.Chapter))
-            {
-                var chapterNumber = chapterGroup.Key;
-                var chapterKey = $"{bookId}:{chapterNumber}";
-                var chapterVerses = chapterGroup.ToList();
-                var chapterOpen = openChapters.Contains(chapterKey);
-                <div class="d-flex flex-wrap align-items-baseline gap-2 py-1">
-                    <a href="@($"books/{bookCode}?chapter={chapterNumber}")">Chapter @(chapterNumber)</a>
-                    <span class="badge text-bg-secondary">@(chapterVerses.Count)</span>
-                    <ExpandLink Open="@(chapterOpen)" OnToggle="@(ChapterToggle(chapterKey))" />
-                </div>
-                @if (chapterOpen)
+        <Virtualize Items="@(rows)" Context="row" ItemSize="@(64)" OverscanCount="@(12)">
+                @if (row.Kind == TagListKind.Book)
                 {
-                    <div class="list-group mb-3">
-                        @foreach (var verse in chapterVerses)
-                        {
-                            <VerseRow VerseNumber="@(verse.VerseNumber)" Text="@(verse.Text)" Tags="@(verse.Tags)" ActiveTagId="@(tag.Id)" TagLink="@(TagHref)" />
-                        }
+                    <div @key="@(row.Key)" class="d-flex flex-wrap align-items-baseline gap-2 tag-list-book">
+                        <h2 class="h5 mb-0">
+                            <a href="@($"books/{row.BookCode}")">@(row.BookName)</a>
+                        </h2>
+                        <span class="badge text-bg-secondary">@(row.Count)</span>
+                        <ExpandLink Open="@(row.Open)" OnToggle="@(BookToggle(row.BookId))" />
                     </div>
                 }
-            }
-        }
+                else if (row.Kind == TagListKind.Chapter)
+                {
+                    <div @key="@(row.Key)" class="d-flex flex-wrap align-items-baseline gap-2 py-1">
+                        <a href="@($"books/{row.BookCode}?chapter={row.Chapter}")">Chapter @(row.Chapter)</a>
+                        <span class="badge text-bg-secondary">@(row.Count)</span>
+                        <ExpandLink Open="@(row.Open)" OnToggle="@(ChapterToggle(row.ChapterKey))" />
+                    </div>
+                }
+                else if (row.Verse is TaggedVerseRow verse)
+                {
+                    <div @key="@(row.Key)">
+                        <VerseRow VerseNumber="@(verse.VerseNumber)" Text="@(verse.Text)" Tags="@(verse.Tags)" ActiveTagId="@(tag.Id)" TagLink="@(TagHref)" GroupParents="@(true)" Index="@(Catalog.Index)" TagsById="@(Catalog.TagsById)" />
+                    </div>
+                }
+        </Virtualize>
     }
 }
 
@@ -113,11 +108,17 @@ else
     [SupplyParameterFromQuery(Name = "tags")]
     public int[]? TagQueryIds { get; set; }
 
+    [SupplyParameterFromQuery(Name = "op")]
+    public string? OperatorQuery { get; set; }
+
     VerseTagRow? tag;
     List<VerseTagRef> parents = [];
     List<TaggedVerseRow>? allVerses;
     List<TaggedVerseRow>? verses;
+    List<TagListRow> rows = [];
+    List<int> bookIds = [];
     List<string> chapterKeys = [];
+    HashSet<int> closedBooks = [];
     HashSet<string> openChapters = [];
     int loadedId;
     int loadVersion;
@@ -135,7 +136,7 @@ else
                 && selection.MatchesLocation(writtenHref, PagePath(), Catalog.Books);
             if (!ownNavigation)
             {
-                selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, Catalog.Books, Catalog.TagsById);
+                selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, OperatorQuery, Catalog.Books, Catalog.TagsById);
                 writtenHref = current;
             }
 
@@ -159,7 +160,10 @@ else
         parents = [];
         allVerses = null;
         verses = null;
+        rows = [];
+        bookIds = [];
         chapterKeys = [];
+        closedBooks = [];
         openChapters = [];
 
         var row = await Db.GetVerseTagAsync(requestedId);
@@ -205,18 +209,104 @@ else
         if (allVerses is null || !Catalog.Loaded)
             return;
 
-        Catalog.Apply(selection.BookIds, selection.TagIds);
+        Catalog.Apply(selection.BookIds, selection.TagIds, selection.MatchAnyTag);
         verses = allVerses.Where(MatchesFilter).ToList();
-        chapterKeys = verses
-            .Select(verse => $"{verse.BookId}:{verse.Chapter}")
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
+        RebuildRows();
+    }
+
+    void RebuildRows()
+    {
+        var next = new List<TagListRow>();
+        var nextBookIds = new List<int>();
+        var nextChapterKeys = new List<string>();
+        if (verses is not null)
+        {
+            var index = 0;
+            while (index < verses.Count)
+            {
+                var book = verses[index];
+                var bookStart = index;
+                while (index < verses.Count && verses[index].BookId == book.BookId)
+                    index++;
+
+                var bookOpen = !closedBooks.Contains(book.BookId);
+                nextBookIds.Add(book.BookId);
+                next.Add(new TagListRow
+                {
+                    Kind = TagListKind.Book,
+                    Key = $"b{book.BookId}",
+                    BookId = book.BookId,
+                    BookCode = book.BookCode,
+                    BookName = book.BookName,
+                    Count = index - bookStart,
+                    Open = bookOpen,
+                });
+
+                var chapterIndex = bookStart;
+                while (chapterIndex < index)
+                {
+                    var chapter = verses[chapterIndex];
+                    var chapterStart = chapterIndex;
+                    while (chapterIndex < index && verses[chapterIndex].Chapter == chapter.Chapter)
+                        chapterIndex++;
+
+                    var chapterKey = $"{book.BookId}:{chapter.Chapter}";
+                    nextChapterKeys.Add(chapterKey);
+                    if (!bookOpen)
+                        continue;
+
+                    var chapterOpen = openChapters.Contains(chapterKey);
+                    next.Add(new TagListRow
+                    {
+                        Kind = TagListKind.Chapter,
+                        Key = "c" + chapterKey,
+                        BookId = book.BookId,
+                        BookCode = book.BookCode,
+                        Chapter = chapter.Chapter,
+                        ChapterKey = chapterKey,
+                        Count = chapterIndex - chapterStart,
+                        Open = chapterOpen,
+                    });
+                    if (!chapterOpen)
+                        continue;
+
+                    for (var verseIndex = chapterStart; verseIndex < chapterIndex; verseIndex++)
+                    {
+                        var verse = verses[verseIndex];
+                        next.Add(new TagListRow
+                        {
+                            Kind = TagListKind.Verse,
+                            Key = $"v{book.BookId}:{chapter.Chapter}:{verse.VerseNumber}",
+                            Verse = verse,
+                        });
+                    }
+                }
+            }
+        }
+
+        bookIds = nextBookIds;
+        chapterKeys = nextChapterKeys;
+        rows = next;
     }
 
     bool MatchesFilter(TaggedVerseRow verse)
     {
         if (selection.BookIds.Count > 0 && !selection.BookIds.Contains(verse.BookId))
             return false;
+
+        if (selection.TagIds.Count == 0)
+            return true;
+
+        if (selection.MatchAnyTag)
+        {
+            foreach (var tagId in selection.TagIds)
+            {
+                if (VerseHas(verse, tagId))
+                    return true;
+            }
+
+            return false;
+        }
 
         foreach (var tagId in selection.TagIds)
         {
@@ -261,6 +351,17 @@ else
 
     string RelativeUri() => Navigation.ToBaseRelativePath(Navigation.Uri);
 
+    EventCallback BookToggle(int bookId) =>
+        EventCallback.Factory.Create(this, () => ToggleBook(bookId));
+
+    void ToggleBook(int bookId)
+    {
+        if (!closedBooks.Add(bookId))
+            closedBooks.Remove(bookId);
+
+        RebuildRows();
+    }
+
     EventCallback ChapterToggle(string key) =>
         EventCallback.Factory.Create(this, () => ToggleChapter(key));
 
@@ -268,14 +369,49 @@ else
     {
         if (!openChapters.Add(key))
             openChapters.Remove(key);
+
+        RebuildRows();
     }
 
     void ExpandAll()
     {
+        foreach (var bookId in bookIds)
+            closedBooks.Remove(bookId);
+
         openChapters.Clear();
         foreach (var key in chapterKeys)
             openChapters.Add(key);
+
+        RebuildRows();
     }
 
-    void CollapseAll() => openChapters.Clear();
+    void CollapseAll()
+    {
+        foreach (var bookId in bookIds)
+            closedBooks.Add(bookId);
+
+        openChapters.Clear();
+        RebuildRows();
+    }
+
+    enum TagListKind
+    {
+        Book,
+        Chapter,
+        Verse,
+    }
+
+    sealed class TagListRow
+    {
+        public TagListKind Kind { get; init; }
+        public string Key { get; init; } = "";
+        public int BookId { get; init; }
+        public string BookCode { get; init; } = "";
+        public string BookName { get; init; } = "";
+        public int Chapter { get; init; }
+        public string ChapterKey { get; init; } = "";
+        public int Count { get; init; }
+        public bool Open { get; init; }
+        public TaggedVerseRow? Verse { get; init; }
+    }
 }

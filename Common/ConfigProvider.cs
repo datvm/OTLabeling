@@ -63,7 +63,8 @@ public record AppConfig(
     string DbPath,
     string Translation,
     AiConfig? Ai,
-    VerseLabelingConfig? VerseLabeling
+    VerseLabelingConfig? VerseLabeling,
+    JevConfig? Jev = null
 );
 
 public record AiConfig(
@@ -82,5 +83,16 @@ public record VerseLabelingConfig(
     string? ImmediateContext,
     int? Rpm,
     int? RetryDelaySeconds,
-    int? ResumeRun
+    int? ResumeRun,
+    TopicConfig[]? Topics = null
+);
+
+public record JevConfig(
+    string? Model
+);
+
+public record TopicConfig(
+    string? Code,
+    string? Title,
+    string? Question
 );

@@ -10,15 +10,25 @@
         // "InputTokenCost": 0.0, // Dollars per 1,000,000 tokens. Used when the response has no cost.
         // "OutputTokenCost": 0.0
     },
+    "Jev": {
+        "Model": "jev-latest"
+    },
     "VerseLabeling": {
         //"Step": "clear-runs",
-        "Step": "label-is-israelites",
-        "Books": [ "*" ],
+        "Step": "label-topics",
+        "Books": [ "GEN" ],
         "Chapters": "",
         "Summary": "",
         "ImmediateContext": "",
+        "Topics": [
+            {
+                "Code": "HasForeigner",
+                "Title": "Foreign nation or people group",
+                "Question": "Does the verse mention a named non-Israelite nation, people, or ethnic group (e.g., Egypt, Canaan, Philistia, Moab, Assyria, Babylon)?"
+            }
+        ],
         "Rpm": 20,
         "RetryDelaySeconds": 30,
-        "ResumeRun": 13
+        "ResumeRun": 15
     }
 }

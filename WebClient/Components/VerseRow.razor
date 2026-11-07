@@ -3,7 +3,34 @@
         <div class="text-secondary text-nowrap">@(VerseNumber)</div>
         <div class="flex-grow-1">
             <div class="verse-text">@(Text)</div>
-            @if (Tags.Count > 0)
+            @if (Tags.Count > 0 && GroupParents && Index is not null && TagsById is not null)
+            {
+                <div class="verse-tag-groups mt-2">
+                    @foreach (var group in TagParentGroups.Build(Tags, Index, TagsById))
+                    {
+                        <div class="d-flex flex-wrap align-items-center">
+                            @for (var index = 0; index < group.Parents.Count; index++)
+                            {
+                                var parent = group.Parents[index];
+                                @if (index > 0)
+                                {
+                                    <span class="text-secondary mx-1" aria-hidden="true">@(">")</span>
+                                }
+                                <a class="@(TagClass(parent.Id))" href="@(TagHref(parent.Id))">@(parent.Label)</a>
+                            }
+                            @if (group.Parents.Count > 0)
+                            {
+                                <span class="text-secondary">@(":")</span>
+                            }
+                            @foreach (var leaf in group.Leaves)
+                            {
+                                <a class="@(TagClass(leaf.Id)) ms-1" href="@(TagHref(leaf.Id))">@(leaf.Label)</a>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            else if (Tags.Count > 0)
             {
                 <div class="d-flex flex-wrap gap-2 mt-2">
                     @foreach (var chain in Tags)
@@ -16,7 +43,7 @@
                                 {
                                     <span class="text-secondary" aria-hidden="true">›</span>
                                 }
-                                <a class="badge border text-decoration-none @(tag.Id == ActiveTagId ? "text-bg-primary" : "text-bg-light text-dark")" href="@(TagHref(tag.Id))">@(tag.Label)</a>
+                                <a class="@(TagClass(tag.Id))" href="@(TagHref(tag.Id))">@(tag.Label)</a>
                             }
                         </span>
                     }
@@ -42,5 +69,19 @@
     [Parameter]
     public Func<int, string>? TagLink { get; set; }
 
+    [Parameter]
+    public bool GroupParents { get; set; }
+
+    [Parameter]
+    public TagIndex? Index { get; set; }
+
+    [Parameter]
+    public IReadOnlyDictionary<int, VerseTagRow>? TagsById { get; set; }
+
     string TagHref(int id) => TagLink?.Invoke(id) ?? $"tags/{id}";
+
+    string TagClass(int id) =>
+        id == ActiveTagId
+            ? "badge border text-decoration-none text-bg-primary"
+            : "badge border text-decoration-none text-bg-light text-dark";
 }

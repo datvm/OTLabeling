@@ -164,6 +164,38 @@ namespace Common.Migrations
                     b.ToTable("BookOrderItems");
                 });
 
+            modelBuilder.Entity("Common.Entities.ChapterContext", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BookId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Chapter")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ImmediateContext")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("");
+
+                    b.Property<string>("SummarySoFar")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookId", "Chapter")
+                        .IsUnique();
+
+                    b.ToTable("ChapterContexts");
+                });
+
             modelBuilder.Entity("Common.Entities.LabelRun", b =>
                 {
                     b.Property<int>("Id")
@@ -296,6 +328,106 @@ namespace Common.Migrations
                     b.ToTable("LabelRunTags");
                 });
 
+            modelBuilder.Entity("Common.Entities.LabelRunTopic", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .UseCollation("NOCASE");
+
+                    b.Property<int>("LabelRunId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LabelRunId", "Code")
+                        .IsUnique();
+
+                    b.HasIndex("LabelRunId", "SortOrder")
+                        .IsUnique();
+
+                    b.ToTable("LabelRunTopics");
+                });
+
+            modelBuilder.Entity("Common.Entities.LabelRunTopicAnswer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Answer")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LabelRunId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LabelRunTopicId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Probability")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("VerseId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LabelRunTopicId");
+
+                    b.HasIndex("VerseId");
+
+                    b.HasIndex("LabelRunId", "VerseId", "LabelRunTopicId")
+                        .IsUnique();
+
+                    b.ToTable("LabelRunTopicAnswers", t =>
+                        {
+                            t.HasCheckConstraint("CK_LabelRunTopicAnswer_Answer", "[Answer] IN ('Yes', 'No', 'Ambiguous')");
+                        });
+                });
+
+            modelBuilder.Entity("Common.Entities.Topic", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .UseCollation("NOCASE");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("Topics");
+                });
+
             modelBuilder.Entity("Common.Entities.VerseTag", b =>
                 {
                     b.Property<int>("Id")
@@ -407,6 +539,45 @@ namespace Common.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Common.Entities.VerseTopicAnswer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Answer")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .UseCollation("NOCASE");
+
+                    b.Property<int>("LabelRunId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Probability")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("VerseId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code");
+
+                    b.HasIndex("LabelRunId");
+
+                    b.HasIndex("VerseId", "Code")
+                        .IsUnique();
+
+                    b.ToTable("VerseTopicAnswers", t =>
+                        {
+                            t.HasCheckConstraint("CK_VerseTopicAnswer_Answer", "[Answer] IN ('Yes', 'No', 'Ambiguous')");
+                        });
+                });
+
             modelBuilder.Entity("Common.Entities.BibleVerse", b =>
                 {
                     b.HasOne("Common.Entities.BibleBook", "Book")
@@ -456,6 +627,15 @@ namespace Common.Migrations
                     b.Navigation("BookOrder");
                 });
 
+            modelBuilder.Entity("Common.Entities.ChapterContext", b =>
+                {
+                    b.HasOne("Common.Entities.BibleBook", null)
+                        .WithMany()
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Common.Entities.LabelRunChapter", b =>
                 {
                     b.HasOne("Common.Entities.BibleBook", null)
@@ -488,6 +668,36 @@ namespace Common.Migrations
                     b.HasOne("Common.Entities.VerseTag", null)
                         .WithMany()
                         .HasForeignKey("VerseTagId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Common.Entities.LabelRunTopic", b =>
+                {
+                    b.HasOne("Common.Entities.LabelRun", null)
+                        .WithMany()
+                        .HasForeignKey("LabelRunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Common.Entities.LabelRunTopicAnswer", b =>
+                {
+                    b.HasOne("Common.Entities.LabelRun", null)
+                        .WithMany()
+                        .HasForeignKey("LabelRunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Common.Entities.LabelRunTopic", null)
+                        .WithMany()
+                        .HasForeignKey("LabelRunTopicId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Common.Entities.BibleVerse", null)
+                        .WithMany()
+                        .HasForeignKey("VerseId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -539,6 +749,21 @@ namespace Common.Migrations
                     b.HasOne("Common.Entities.LabelRun", null)
                         .WithMany()
                         .HasForeignKey("RunBId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Common.Entities.BibleVerse", null)
+                        .WithMany()
+                        .HasForeignKey("VerseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Common.Entities.VerseTopicAnswer", b =>
+                {
+                    b.HasOne("Common.Entities.LabelRun", null)
+                        .WithMany()
+                        .HasForeignKey("LabelRunId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 

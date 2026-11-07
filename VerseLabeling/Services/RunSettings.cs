@@ -100,7 +100,7 @@ sealed class RunSettings
         return (decimal)value;
     }
 
-    static int ReadResume(int? resumeRun)
+    internal static int ReadResume(int? resumeRun)
     {
         if (resumeRun is null or 0)
             return 0;
@@ -111,7 +111,7 @@ sealed class RunSettings
         return resumeRun.Value;
     }
 
-    static string Require(string? value, string name)
+    internal static string Require(string? value, string name)
     {
         if (value is null)
             throw new LabelingException($"{name} is missing.");
@@ -135,7 +135,7 @@ sealed class RunSettings
         "REV",
     ];
 
-    static IReadOnlyList<string> ReadBooks(string[]? books)
+    internal static IReadOnlyList<string> ReadBooks(string[]? books)
     {
         if (books is null)
             throw new LabelingException("Books is missing.");
@@ -166,7 +166,7 @@ sealed class RunSettings
         return codes;
     }
 
-    static string ReadChapters(string? chapters, out ChapterRange? range)
+    internal static string ReadChapters(string? chapters, out ChapterRange? range)
     {
         if (string.IsNullOrWhiteSpace(chapters))
         {
@@ -217,7 +217,7 @@ sealed class RunSettings
         return int.TryParse(text, out number) && number >= 1;
     }
 
-    static int ReadRpm(int? rpm)
+    internal static int ReadRpm(int? rpm)
     {
         if (rpm is null)
             return 15;
@@ -228,7 +228,7 @@ sealed class RunSettings
         return rpm.Value;
     }
 
-    static int ReadRetryDelay(int? seconds)
+    internal static int ReadRetryDelay(int? seconds)
     {
         if (seconds is null)
             return 30;
@@ -239,7 +239,7 @@ sealed class RunSettings
         return seconds.Value;
     }
 
-    static string NormalizeContext(string? value)
+    internal static string NormalizeContext(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return "None";

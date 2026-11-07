@@ -30,9 +30,9 @@ public sealed class TagCatalog(LabelingDatabase database)
         Loaded = true;
     }
 
-    public void Apply(IReadOnlySet<int> bookIds, IReadOnlyList<int> tagIds)
+    public void Apply(IReadOnlySet<int> bookIds, IReadOnlyList<int> tagIds, bool matchAnyTag)
     {
-        Index.Apply(bookIds, tagIds);
+        Index.Apply(bookIds, tagIds, matchAnyTag);
         foreach (var tag in Tags)
             tag.VerseCount = Index.CountOf(tag.Id);
     }

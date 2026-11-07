@@ -41,7 +41,17 @@
                         if (rows.Count == 0)
                             continue;
 
-                        <h3 class="@($"h6 {(testamentIndex == 0 ? "mt-0" : "mt-3")} mb-2")">@(testament)</h3>
+                        var bookIds = rows.Select(book => book.Id).ToList();
+                        <div class="@($"d-flex align-items-center gap-3 {(testamentIndex == 0 ? "mt-0" : "mt-3")} mb-2")">
+                            <h3 class="h6 mb-0">@(testament)</h3>
+                            <div class="form-check mb-0">
+                                <input class="form-check-input" type="checkbox" id="@($"filter-testament-{testamentIndex}")"
+                                       aria-label="@($"Select all {testament} books")"
+                                       checked="@(TestamentSelected(bookIds))"
+                                       @onchange="@((ChangeEventArgs change) => SetTestament(bookIds, change))" />
+                                <label class="form-check-label" for="@($"filter-testament-{testamentIndex}")">Select all</label>
+                            </div>
+                        </div>
                         <div class="filter-books">
                             @foreach (var book in rows)
                             {
@@ -58,7 +68,23 @@
             }
         </div>
 
-        <label class="form-label" for="tag-add">Tags</label>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <label class="form-label mb-0" for="tag-add">Tags</label>
+            <div class="d-flex gap-3">
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="radio" name="tag-match" id="tag-match-and"
+                           checked="@(!Selection.MatchAnyTag)"
+                           @onchange="@(() => SetMatch(false))" />
+                    <label class="form-check-label" for="tag-match-and">And</label>
+                </div>
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="radio" name="tag-match" id="tag-match-or"
+                           checked="@(Selection.MatchAnyTag)"
+                           @onchange="@(() => SetMatch(true))" />
+                    <label class="form-check-label" for="tag-match-or">Or</label>
+                </div>
+            </div>
+        </div>
         @if (Selection.SelectedTags.Count > 0)
         {
             <div class="d-flex flex-wrap gap-1 mb-2">
@@ -76,7 +102,7 @@
         }
         <input id="tag-add" class="form-control" autocomplete="off" placeholder="Add a tag, such as Isaac"
                @bind="@(Selection.TagQuery)" @bind:event="oninput" @bind:after="OnTagQuery" @onkeydown="OnTagKeyDown" />
-        <div class="form-text">Every selected tag must be on the verse. A tag stays when it shares those verses. The number is the count of those verses.</div>
+        <div class="form-text">@(Selection.MatchAnyTag ? "Any selected tag may be on the verse." : "Every selected tag must be on the verse.") A tag stays when it shares those verses. The number is the count of those verses.</div>
         @if (Selection.Suggestions.Count > 0)
         {
             <div class="list-group mt-2">
@@ -115,6 +141,9 @@
 
     void OnKeyword() => Changed.InvokeAsync();
 
+    bool TestamentSelected(List<int> bookIds) =>
+        bookIds.Count > 0 && bookIds.TrueForAll(Selection.BookIds.Contains);
+
     void SetBook(int bookId, ChangeEventArgs change)
     {
         if (change.Value is true)
@@ -125,9 +154,34 @@
         Changed.InvokeAsync();
     }
 
+    void SetTestament(List<int> bookIds, ChangeEventArgs change)
+    {
+        if (change.Value is true)
+        {
+            foreach (var bookId in bookIds)
+                Selection.BookIds.Add(bookId);
+        }
+        else
+        {
+            foreach (var bookId in bookIds)
+                Selection.BookIds.Remove(bookId);
+        }
+
+        Changed.InvokeAsync();
+    }
+
     void RemoveBook(int bookId)
     {
         Selection.BookIds.Remove(bookId);
+        Changed.InvokeAsync();
+    }
+
+    void SetMatch(bool matchAny)
+    {
+        if (Selection.MatchAnyTag == matchAny)
+            return;
+
+        Selection.MatchAnyTag = matchAny;
         Changed.InvokeAsync();
     }
 

@@ -6,6 +6,9 @@ static class ClearRuns
 
     static readonly string[] Tables =
     [
+        "VerseTopicAnswers",
+        "LabelRunTopicAnswers",
+        "LabelRunTopics",
         "VerseTagResolutions",
         "LabelRunTags",
         "VerseTagMappings",
@@ -13,6 +16,7 @@ static class ClearRuns
         "VerseTags",
         "LabelRunChapters",
         "LabelRuns",
+        "ChapterContexts",
     ];
 
     public static async Task RunAsync(LabelingContext database, ConfigProvider config)
@@ -50,6 +54,9 @@ static class ClearRuns
 
     static Task<int> DeleteAsync(LabelingContext database, string table) => table switch
     {
+        "VerseTopicAnswers" => database.Database.ExecuteSqlAsync($"DELETE FROM \"VerseTopicAnswers\";"),
+        "LabelRunTopicAnswers" => database.Database.ExecuteSqlAsync($"DELETE FROM \"LabelRunTopicAnswers\";"),
+        "LabelRunTopics" => database.Database.ExecuteSqlAsync($"DELETE FROM \"LabelRunTopics\";"),
         "VerseTagResolutions" => database.Database.ExecuteSqlAsync($"DELETE FROM \"VerseTagResolutions\";"),
         "LabelRunTags" => database.Database.ExecuteSqlAsync($"DELETE FROM \"LabelRunTags\";"),
         "VerseTagMappings" => database.Database.ExecuteSqlAsync($"DELETE FROM \"VerseTagMappings\";"),
@@ -57,6 +64,7 @@ static class ClearRuns
         "VerseTags" => database.Database.ExecuteSqlAsync($"DELETE FROM \"VerseTags\";"),
         "LabelRunChapters" => database.Database.ExecuteSqlAsync($"DELETE FROM \"LabelRunChapters\";"),
         "LabelRuns" => database.Database.ExecuteSqlAsync($"DELETE FROM \"LabelRuns\";"),
+        "ChapterContexts" => database.Database.ExecuteSqlAsync($"DELETE FROM \"ChapterContexts\";"),
         _ => throw new LabelingException($"Table '{table}' is not a labeling table."),
     };
 

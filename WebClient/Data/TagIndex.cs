@@ -86,11 +86,11 @@ public sealed class TagIndex
         return false;
     }
 
-    public void Apply(IReadOnlySet<int> bookIds, IReadOnlyList<int> tagIds)
+    public void Apply(IReadOnlySet<int> bookIds, IReadOnlyList<int> tagIds, bool matchAnyTag)
     {
         HashSet<int>? matched = null;
         if (bookIds.Count > 0 || tagIds.Count > 0)
-            matched = Match(bookIds, tagIds);
+            matched = Match(bookIds, tagIds, matchAnyTag);
 
         MatchedVerseCount = matched?.Count ?? allVerses.Count;
         counts.Clear();
@@ -98,10 +98,26 @@ public sealed class TagIndex
             counts[id] = Count(id, matched);
     }
 
-    HashSet<int> Match(IReadOnlySet<int> bookIds, IReadOnlyList<int> tagIds)
+    HashSet<int> Match(IReadOnlySet<int> bookIds, IReadOnlyList<int> tagIds, bool matchAnyTag)
     {
-        IEnumerable<int> source = tagIds.Count == 0 ? allVerses : subtreeVerses[tagIds[0]];
         var result = new HashSet<int>();
+        if (matchAnyTag && tagIds.Count > 0)
+        {
+            foreach (var tagId in tagIds)
+            {
+                foreach (var verseId in subtreeVerses[tagId])
+                {
+                    if (bookIds.Count > 0 && !BookMatches(verseId, bookIds))
+                        continue;
+
+                    result.Add(verseId);
+                }
+            }
+
+            return result;
+        }
+
+        IEnumerable<int> source = tagIds.Count == 0 ? allVerses : subtreeVerses[tagIds[0]];
         foreach (var verseId in source)
         {
             if (bookIds.Count > 0 && !BookMatches(verseId, bookIds))

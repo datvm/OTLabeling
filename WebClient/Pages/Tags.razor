@@ -77,12 +77,15 @@ else
     [SupplyParameterFromQuery(Name = "tags")]
     public int[]? TagQueryIds { get; set; }
 
+    [SupplyParameterFromQuery(Name = "op")]
+    public string? OperatorQuery { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
             await Catalog.LoadAsync();
-            selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, Catalog.Books, Catalog.TagsById);
+            selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, OperatorQuery, Catalog.Books, Catalog.TagsById);
             writtenHref = RelativeUri();
             Apply();
             ready = true;
@@ -104,7 +107,7 @@ else
             return;
 
         writtenHref = current;
-        if (!selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, Catalog.Books, Catalog.TagsById))
+        if (!selection.ApplyQuery(KeywordQuery, BookQuery, TagQueryIds, OperatorQuery, Catalog.Books, Catalog.TagsById))
             return;
 
         Apply();
@@ -126,7 +129,7 @@ else
 
     void Apply()
     {
-        Catalog.Apply(selection.BookIds, selection.TagIds);
+        Catalog.Apply(selection.BookIds, selection.TagIds, selection.MatchAnyTag);
         selection.SyncSelected(Catalog.TagsById);
         RebuildTree();
     }

@@ -10,11 +10,14 @@ The program deletes the run logs.
 The program keeps the extracted Bible and its metadata.
 The program does not call the API.
 The program does not read the API key.
-The program does not read `Books`, `Chapters`, `Summary`, `ImmediateContext`, `Rpm`, `RetryDelaySeconds`, `ResumeRun`, `InputTokenCost`, `OutputTokenCost`, or `ReasoningEffort` for this step.
+The program does not read `Books`, `Chapters`, `Summary`, `ImmediateContext`, `Topics`, `Rpm`, `RetryDelaySeconds`, `ResumeRun`, `InputTokenCost`, `OutputTokenCost`, or `ReasoningEffort` for this step.
 The program does not insert a `LabelRun` row.
 
 The program deletes these tables when they exist, in this order:
 
+- `VerseTopicAnswers`
+- `LabelRunTopicAnswers`
+- `LabelRunTopics`
 - `VerseTagResolutions`
 - `LabelRunTags`
 - `VerseTagMappings`
@@ -22,9 +25,10 @@ The program deletes these tables when they exist, in this order:
 - `VerseTags`
 - `LabelRunChapters`
 - `LabelRuns`
+- `ChapterContexts`
 
 One transaction holds those deletes.
-The program keeps `BibleBook`, `BibleVerse`, `BookLabel`, `BookLabelMapping`, `BookOrder`, and `BookOrderItem`.
+The program keeps `BibleBook`, `BibleVerse`, `BookLabel`, `BookLabelMapping`, `BookOrder`, `BookOrderItem`, and `Topic`.
 
 The program deletes the folder `out/verse-labeling`.
 That folder holds the run logs.

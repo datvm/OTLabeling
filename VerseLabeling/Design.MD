@@ -3,6 +3,7 @@
 This document defines the VerseLabeling program.
 Each step has its own design file.
 `Design-Step1.MD` defines step 1.
+`Design-Step2.MD` defines step 2.
 
 An example shows the shape of a value.
 An example is not the approved catalog.
@@ -38,17 +39,21 @@ Keep the two stores separate.
 
 The program reads `project-conf.json`.
 `ConfigProvider` loads that file into `AppConfig`.
-Add `Ai` and `VerseLabeling` to `AppConfig`.
+Add `Ai`, `Jev`, and `VerseLabeling` to `AppConfig`.
 The program does not read process arguments.
 A process argument is an error.
 The program does not read `appsettings.json`.
 A JSON null follows the same rule as a missing value.
 
 `Ai` holds `BaseUrl`, `Model`, `InputTokenCost`, `OutputTokenCost`, and `ReasoningEffort`.
+`Jev` holds `Model`.
 `VerseLabeling` holds the run settings.
 The API key is not in this file.
 A missing `Ai` object is an error for `label-is-israelites`.
-`clear-runs` does not read `Ai` or the API key.
+`label-topics` does not read `Ai`.
+`label-topics` reads `Jev`.
+`Design-Step2.MD` defines `label-topics`.
+`clear-runs` does not read `Ai`, `Jev`, or the API key.
 A missing `VerseLabeling` object is an error.
 A missing `Step` is an error.
 A blank `Step` is an error.
@@ -56,11 +61,12 @@ A step name with no design file is an error.
 
 `VerseLabeling` fields:
 
-- `Step`: the step name. Step 1 uses `label-is-israelites`. The clear step uses `clear-runs`.
+- `Step`: the step name. Step 1 uses `label-is-israelites`. Step 2 uses `label-topics`. The clear step uses `clear-runs`.
 - `Books`: the book codes, in run order.
 - `Chapters`: the chapter range. An empty value selects every chapter.
 - `Summary`: SummarySoFar for the first request of the run.
 - `ImmediateContext`: ImmediateContext for the first request of the run.
+- `Topics`: the topic list for `label-topics`. `Design-Step2.MD` defines it. `label-is-israelites` does not read it.
 - `Rpm`: the request limit.
 - `RetryDelaySeconds`: the wait before another attempt after HTTP 429 or HTTP 503. A missing value means 30.
 - `ResumeRun`: a `LabelRun` id to continue. `0` starts a new run. A missing value means `0`.
@@ -68,7 +74,7 @@ A step name with no design file is an error.
 A future step adds one step name and one design file.
 `Design-Clear.MD` defines `clear-runs`.
 That step deletes labeling rows and run logs.
-That step keeps `BibleBook`, `BibleVerse`, and the book metadata.
+That step keeps `BibleBook`, `BibleVerse`, the book metadata, and `Topic`.
 That step does not call the API.
 
 Example of the two objects.
@@ -225,12 +231,17 @@ When `ImmediateContext` is missing, that field is the text `None`.
 A blank value after the trim means the text `None`.
 The value `None` means the text `None`.
 
-The program uses the two values for the first request only.
-Each later request in that same book uses the previous output in this run.
-The first request of each later book uses the text `None` for SummarySoFar.
-The first request of each later book uses the text `None` for ImmediateContext.
+The program uses the two config values only when the chapter has no stored context from the previous chapter.
+A chapter after chapter 1 uses the `ChapterContext` row for the previous chapter number in that book.
+That row holds the SummarySoFar and ImmediateContext written when that previous chapter was labeled.
+The program uses that row when the next run labels the following chapter.
+The program also uses the context just written in this process when the next chapter number is one higher.
+The program does not skip back to an earlier chapter.
 The program does not copy SummarySoFar from the previous book.
 The program does not copy ImmediateContext from the previous book.
+When the previous chapter has no stored context, the first request of the run uses the config values.
+Every other request with no stored context uses the text `None` for both fields.
+Chapter 1 of a book has no previous chapter.
 
 ## Request limit
 
@@ -358,6 +369,7 @@ Add a `DbSet` for each one on `LabelingContext`.
 - `VerseTagMapping`
 - `LabelRun`
 - `LabelRunChapter`
+- `ChapterContext`
 - `LabelRunTag`
 - `VerseTagResolution`
 
@@ -492,9 +504,8 @@ The program does not read `Books`, `Chapters`, `Summary`, or `ImmediateContext` 
 The program uses the current `Rpm`, `RetryDelaySeconds`, `BaseUrl`, and `Model`.
 The program writes `Rpm`, `BaseUrl`, and `Model` back onto the run.
 The program sends only the chapters whose `Filled` is false, in `SortOrder`.
-The first request of a resumed book uses the previous filled chapter of that same book.
-That previous row supplies `SummarySoFar` and `ImmediateContext`.
-The first chapter of a later book still uses the text `None`.
+A chapter after chapter 1 uses the `ChapterContext` of the previous chapter number in that book.
+The program does not use a filled chapter that is not the previous chapter number.
 The program writes `Run {id} resumed.` and the count of remaining chapters.
 When no chapter is missing, the program sets `Status` to `Completed`.
 The program writes that the run has no missing chapters.
@@ -518,6 +529,27 @@ Columns:
 The unique key is `LabelRunId`, then `SortOrder`.
 The unique key is `LabelRunId`, then `BookId`, then `Chapter`.
 The database rejects a delete of a book that a chapter plan names.
+
+### ChapterContext
+
+One row is the context written for one chapter.
+The program writes the row in the same transaction that stores that chapter's tags.
+A later successful labeling of that same chapter replaces the row.
+The next run reads the row when it labels the following chapter in that book.
+`SummarySoFar` is the book summary through this chapter.
+`ImmediateContext` is the topic text for the next chapter.
+The program does not write the row when the chapter check fails.
+
+Columns:
+
+- `Id`: integer key.
+- `BookId`: required foreign key to `BibleBook`.
+- `Chapter`: required integer. The chapter number.
+- `SummarySoFar`: required text.
+- `ImmediateContext`: required text.
+
+The unique key is `BookId`, then `Chapter`.
+The database rejects a delete of a book that a chapter context names.
 
 ### LabelRunTag
 

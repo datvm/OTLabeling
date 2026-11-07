@@ -60,25 +60,21 @@ sealed class IsraeliteLabeler(
                 requestStart = Stopwatch.GetTimestamp();
             }
             string? bookCode = null;
+            var carriedChapter = 0;
             string? carriedSummary = null;
             string? carriedImmediate = null;
-            var first = chapters[0];
-            if (!first.FirstInRun)
-            {
-                var prior = await PreviousChapterAsync(run.Id, first);
-                if (prior is not null)
-                {
-                    bookCode = first.Book.Code;
-                    carriedSummary = prior.SummarySoFar;
-                    carriedImmediate = prior.ImmediateContext;
-                }
-            }
 
             foreach (var chapter in chapters)
             {
                 current = chapter;
                 Console.WriteLine($"{chapter.Book.Code} {chapter.Chapter} started.");
-                var (summary, immediate) = ContextFor(chapter, ref bookCode, ref carriedSummary, ref carriedImmediate, run);
+                var (summary, immediate) = await ContextForAsync(
+                    chapter,
+                    run,
+                    bookCode,
+                    carriedChapter,
+                    carriedSummary,
+                    carriedImmediate);
                 var request = ChapterPrompt.Build(summary, immediate, chapter.Verses);
                 var messages = new List<ChatMessage> { new(ChatRole.User, request) };
                 await WaitForTurnAsync();
@@ -128,6 +124,8 @@ sealed class IsraeliteLabeler(
                     byVerse,
                     output.SummarySoFar!,
                     output.ImmediateContext!);
+                bookCode = chapter.Book.Code;
+                carriedChapter = chapter.Chapter;
                 carriedSummary = output.SummarySoFar;
                 carriedImmediate = output.ImmediateContext;
                 Console.WriteLine($"{chapter.Book.Code} {chapter.Chapter} done.");
@@ -501,17 +499,6 @@ sealed class IsraeliteLabeler(
         return selected;
     }
 
-    async Task<LabelRunChapter?> PreviousChapterAsync(int runId, SelectedChapter chapter)
-    {
-        return await database.LabelRunChapters
-            .Where(row => row.LabelRunId == runId
-                && row.BookId == chapter.Book.Id
-                && row.SortOrder < chapter.SortOrder
-                && row.Filled)
-            .OrderByDescending(row => row.SortOrder)
-            .FirstOrDefaultAsync();
-    }
-
     static List<int> ChapterNumbers(string bookCode, List<int> stored, ChapterRange? range)
     {
         if (range is null)
@@ -839,6 +826,7 @@ sealed class IsraeliteLabeler(
             plan.Filled = true;
             plan.SummarySoFar = output.SummarySoFar!;
             plan.ImmediateContext = output.ImmediateContext!;
+            await SaveChapterContextAsync(chapter, output.SummarySoFar!, output.ImmediateContext!);
 
             await database.SaveChangesAsync();
             await transaction.CommitAsync();
@@ -851,23 +839,61 @@ sealed class IsraeliteLabeler(
         }
     }
 
-    static (string Summary, string Immediate) ContextFor(
-        SelectedChapter chapter,
-        ref string? bookCode,
-        ref string? carriedSummary,
-        ref string? carriedImmediate,
-        LabelRun run)
+    async Task SaveChapterContextAsync(SelectedChapter chapter, string summary, string immediate)
     {
-        if (chapter.Book.Code == bookCode)
+        var stored = await database.ChapterContexts
+            .Where(row => row.BookId == chapter.Book.Id && row.Chapter == chapter.Chapter)
+            .FirstOrDefaultAsync();
+        if (stored is null)
+        {
+            database.ChapterContexts.Add(new ChapterContext
+            {
+                BookId = chapter.Book.Id,
+                Chapter = chapter.Chapter,
+                SummarySoFar = summary,
+                ImmediateContext = immediate,
+            });
+            return;
+        }
+
+        database.ChapterContexts.Attach(stored);
+        stored.SummarySoFar = summary;
+        stored.ImmediateContext = immediate;
+    }
+
+    async Task<(string Summary, string Immediate)> ContextForAsync(
+        SelectedChapter chapter,
+        LabelRun run,
+        string? bookCode,
+        int carriedChapter,
+        string? carriedSummary,
+        string? carriedImmediate)
+    {
+        if (chapter.Chapter > 1
+            && chapter.Book.Code == bookCode
+            && carriedChapter == chapter.Chapter - 1
+            && HasWords(carriedSummary)
+            && HasWords(carriedImmediate))
             return (carriedSummary!, carriedImmediate!);
 
+        if (chapter.Chapter > 1)
+        {
+            var stored = await database.ChapterContexts
+                .Where(row => row.BookId == chapter.Book.Id && row.Chapter == chapter.Chapter - 1)
+                .FirstOrDefaultAsync();
+            if (stored is not null && HasWords(stored.SummarySoFar) && HasWords(stored.ImmediateContext))
+                return (stored.SummarySoFar, stored.ImmediateContext);
+        }
+
         var laterBook = bookCode is not null;
-        bookCode = chapter.Book.Code;
         if (laterBook || !chapter.FirstInRun)
             return ("None", "None");
 
         return (run.Summary, run.ImmediateContext);
     }
+
+    static bool HasWords(string? text) =>
+        text?.Any(char.IsLetterOrDigit) == true;
 
     async Task MarkFailedAsync(LabelRun? run)
     {
